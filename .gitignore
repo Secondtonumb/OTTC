@@ -1,0 +1,8 @@
+.DS_Store
+.vscode/
+ottc/config/path_config.py
+bashcripts/
+OTTC.code-workspace
+measure_alignment_metrics.ipynb
+vocab/
+__pycache__/
