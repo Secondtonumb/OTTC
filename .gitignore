@@ -6,3 +6,9 @@ OTTC.code-workspace
 measure_alignment_metrics.ipynb
 vocab/
 __pycache__/
+reproduction/vendor/
+reproduction/cache/
+reproduction/models/
+reproduction/data/
+reproduction/results/
+wandb/

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#PBS -N wavlm_ce_batch_probe
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/wavlm_ce_timit_20261013/profile_job.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_dir=/work/gm64/m64000/OTTC/reproduction/wavlm_ce_timit_20261013
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 PYTHONDONTWRITEBYTECODE=1
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONUNBUFFERED=1
+export WANDB_MODE="${WANDB_MODE:-online}" WANDB_LOG_MODEL=false WANDB_WATCH=false
+export WANDB_RUN_GROUP=wavlm_timit_ce_batch_profile_20261013
+unset WANDB_DISABLED
+exec 9> "$task_dir/.job.lock"
+flock -n 9 || { echo 'This CE entry already has an active process'; exit 2; }
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,power.draw --format=csv -l 1 > "$task_dir/profile_telemetry.csv" &
+task_monitor_pid=$!
+trap 'kill "$task_monitor_pid" 2>/dev/null || true' EXIT
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python -u "$task_dir/gpu_probe.py"

@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N zapformer_gpu_use
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_gpu_profile_20261012/single.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE=offline
+task_dir=/work/gm64/m64000/OTTC/reproduction/zapformer_gpu_profile_20261012
+for task_duration in 100 200 320; do
+  task_output="$task_dir/single_${task_duration}"
+  if ! "$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 \
+      "$task_dir/native_gpu_probe.py" --output "$task_output" --max-duration "$task_duration"; then
+    echo "Profile duration $task_duration failed; retained logs and partial measurements"
+  fi
+done
+"$MFA_PYTHON" "$task_dir/summarize.py" "$task_dir" --require-single

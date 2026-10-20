@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -N libri100_single3
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=3:ncpus=32:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/libri100_singlehead_20261014/suite.log
+set -euo pipefail
+export LIBRI_BUDGET_SECONDS=82800
+exec bash /work/gm64/m64000/OTTC/reproduction/libri100_singlehead_20261014/run_all.sh

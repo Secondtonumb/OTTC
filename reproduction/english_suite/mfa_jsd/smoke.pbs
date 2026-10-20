@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#PBS -N zapformer_jsd_smoke
+#PBS -q debug-mig
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=4:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export MFA_PYTHON=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export PYTHONPATH=/work/gm64/m64000/zipa/mfa_miyabi_20260922/python_site
+export WANDB_MODE=online CUDA_VISIBLE_DEVICES=0 MFA_TMPDIR=/tmp
+source /work/gm64/m64000/zipa/mfa_miyabi_20260922/zipa/experiments/mfa_zapformer/env.sh
+"$MFA_PYTHON" -u reproduction/english_suite/mfa_jsd/smoke.py --output reproduction/english_suite/mfa_jsd/validation

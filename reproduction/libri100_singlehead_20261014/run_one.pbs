@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N libri100_single_ot
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri100_singlehead_20261014/environment.sh
+objective=${LIBRI_OBJECTIVE:?Specify ce, jsd_upstream or jsd_standard}
+export LIBRI_DEADLINE=$(($(date +%s)+82800))
+"$LIBRI_PYTHON" -u reproduction/libri100_singlehead_20261014/prepare.py
+bash reproduction/libri100_singlehead_20261014/worker.sh "$objective" validate 0 \
+    >> "reproduction/libri100_singlehead_20261014/validate_${objective}.log" 2>&1
+"$LIBRI_PYTHON" -u reproduction/libri100_singlehead_20261014/gate.py
+status=0
+bash reproduction/libri100_singlehead_20261014/worker.sh "$objective" train 0 \
+    >> "reproduction/libri100_singlehead_20261014/train_${objective}.log" 2>&1 || status=$?
+printf '%s\n' "$status" > "reproduction/libri100_singlehead_20261014/train_${objective}_exit_code.txt"
+exec 8> reproduction/libri100_singlehead_20261014/.report.lock
+flock 8
+if [[ "$status" == 0 ]]; then
+    "$LIBRI_PYTHON" -u reproduction/libri100_singlehead_20261014/summarize.py
+fi
+"$LIBRI_PYTHON" reproduction/libri100_singlehead_20261014/update_status.py "$objective phase ended; see experiment completion markers"
+exit "$status"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#PBS -N timit_forced_vs_textfree
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0
+export WANDB_MODE=online WANDB_LOG_MODEL=false WANDB_WATCH=false
+PY=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+"$PY" reproduction/check_alignment_decoders.py
+for objective in ctc ce jsd_upstream; do
+  "$PY" -u reproduction/evaluate_multihead_modes.py --objective "$objective"
+done
+"$PY" reproduction/multihead_timit/prepare_notion_update.py

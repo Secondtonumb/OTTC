@@ -14,7 +14,17 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-from datasets import load_metric
+from jiwer import wer as jiwer_wer
+
+
+def load_metric(name: str):
+    """Use the same jiwer WER calculation without downloading a metric script."""
+    if name != "wer":
+        raise ValueError(name)
+    class WerMetric:
+        def compute(self, *, predictions, references):
+            return jiwer_wer(references, predictions)
+    return WerMetric()
 
 from ottc.config.constants import BORDERING_TOKEN, SPLITTING_DOUBLE_LETTER_TOKEN
 
@@ -185,16 +195,19 @@ def build_compute_metrics_ottc(
         # pred_ids[pred_ids == SPLITTING_DOUBLE_LETTER_TOKEN[1]] = processor.tokenizer.pad_token_id
         # pred_ids[pred_ids == BORDERING_TOKEN[1]] = processor.tokenizer.pad_token_id
 
-        weights_logits = extra_outputs[0]
-        pred_ids[weights_logits == 0] = ignore_token_id
+        weights_logits = np.asarray(extra_outputs[0][0])
+        # Remove dropped/padded frames before decoding. Decoding <ignored>
+        # literally would add a spurious token to every padded utterance.
+        valid_predictions = [ids[(mask > 0) & (weights > 0)].tolist()
+                             for ids, mask, weights in zip(pred_ids, output_mask, weights_logits)]
 
-        label_ids = pred.label_ids
+        label_ids = np.asarray(pred.label_ids).copy()
         # label_ids[label_ids == SPLITTING_DOUBLE_LETTER_TOKEN[1]] = processor.tokenizer.pad_token_id
         # label_ids[label_ids == BORDERING_TOKEN[1]] = processor.tokenizer.pad_token_id
         label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
         label_ids[label_ids == processor.tokenizer.unk_token_id] = processor.tokenizer.pad_token_id
 
-        pred_str = processor.batch_decode(pred_ids)
+        pred_str = processor.batch_decode(valid_predictions)
         label_str = processor.batch_decode(label_ids, group_tokens=False)
 
         wer = wer_metric.compute(predictions=pred_str, references=label_str)
@@ -230,7 +243,7 @@ def build_compute_metrics(
     """
     Backward-compatible alias that returns the CTC compute-metrics helper.
     """
-    if loss_type == "ctc":
+    if loss_type in {"ctc", "softdtw", "softdtweuc", "softdtw_1", "softdtw_0.01"}:
         return build_compute_metrics_ctc(processor, logging_dir, capture_alignments)
     elif loss_type == "ottc":
         return build_compute_metrics_ottc(processor, logging_dir, capture_alignments)

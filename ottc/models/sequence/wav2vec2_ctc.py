@@ -204,6 +204,11 @@ class wvForCTC(PreTrainedModel):
         
         logits = self.lm_head(hidden_states)
 
+        if labels is None:
+            if not return_dict:
+                return (logits,)
+            return CausalLMOutput(logits=logits)
+
         loss = None
         if labels is not None:
             if labels.max() >= self.config.vocab_size:
@@ -236,13 +241,13 @@ class wvForCTC(PreTrainedModel):
                         zero_infinity=self.wave2vec2_config.ctc_zero_infinity,
                     )
             elif "softdtw" in self.loss_type:
-                output_mask = self.create_attention_mask_from_input_sequence(input_lengths)   
+                labels = labels.clone()
                 labels_mask = (labels >= 0).float()
                 labels[labels == -100] = 0 # value choosen not important since it will be masked
                 one_hot_labels = F.one_hot(labels, num_classes=self.config.vocab_size)
                 loss = 0
                 for k in range(logits.shape[0]):
-                    x = logits[k,output_mask[k,:] > 0,:]
+                    x = logits[k,:int(input_lengths[k]),:]
                     y = one_hot_labels[k,labels_mask[k,:]>0,:]
                     loss += self.softdtw(x, y)
                 loss = loss / logits.shape[0]

@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -N libri100_native_ss8
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012/dispatch_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012
+bash "$task_stage/run_ddp.sh"
+if [[ -s "$task_stage/training/TRAIN_COMPLETE.json" ]]; then
+  python - <<'PY'
+import json
+from pathlib import Path
+p=Path('reproduction/zapformer_libri100_s3t2ss_native_20261012')
+checkpoint=sorted((p/'training').glob('step-*.pt'))[-1]
+(p/'INIT_CHECKPOINT_READY.json').write_text(json.dumps(dict(epochs=10,independent_seed=42,world_size=8,topology='s3_t2_star_star',init_checkpoint=str(checkpoint.resolve()),contains_current_and_average=True,libri960_not_started=True))+'\n')
+PY
+else
+  # Only normal checkpointed exits reach this branch; failures stop via set -e.
+  /opt/pbs/bin/qsub -W "depend=afterok:${PBS_JOBID:?}" "$task_stage/run_8gpu.pbs" >> "$task_stage/continuations_8gpu.txt"
+fi

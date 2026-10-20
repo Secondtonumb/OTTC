@@ -1,0 +1,4 @@
+#!/bin/bash
+# Superseded by explicit user instruction: direct S3T2** only.
+echo "Cancelled sequence; use zapformer_libri100_s3t2ss_native_20261012/run.pbs"
+exit 1

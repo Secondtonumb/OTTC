@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#PBS -N cif_quantity40
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+case "${CIF_DATASET:?}" in
+  buckeye) export CIF_Q_MAX_WALL_SECONDS=6600 ;;
+  libri100) export CIF_Q_MAX_WALL_SECONDS=82800 ;;
+  *) exit 2 ;;
+esac
+bash /work/gm64/m64000/OTTC/reproduction/cif_quantity_20261016/worker.sh "$CIF_DATASET" "${CIF_VARIANT:?}"

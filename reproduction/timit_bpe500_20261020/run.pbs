@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N timit_bpe500
+#PBS -q short-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+: "${PBS_JOBID:?PBS allocation required}"
+case "${BPE_COST:-}" in jsd|ce) ;; *) exit 2 ;; esac
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0 WANDB_MODE=disabled
+recipe=reproduction/timit_bpe500_20261020
+"$LIBRI_PYTHON" -u "$recipe/train.py" --check
+"$LIBRI_PYTHON" -u "$recipe/train.py" --cost "$BPE_COST" --smoke --stop-after-steps 1 --max-seconds 600
+"$LIBRI_PYTHON" -u "$recipe/train.py" --cost "$BPE_COST" --smoke --max-seconds 600
+"$LIBRI_PYTHON" -u "$recipe/train.py" --cost "$BPE_COST" --stop-after-steps 200 --max-seconds 1500

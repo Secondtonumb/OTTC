@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N ifmdd_spottc_check8
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_libri100_four_20261013/validation_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_libri100_four_20261013
+export WANDB_MODE="${WANDB_MODE:-online}"
+mkdir -p "$task_stage/validation"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$task_stage/validation/nodes"
+test "$(wc -l < "$task_stage/validation/nodes")" -eq 8
+IFS= read -r SP4_MASTER < "$task_stage/validation/nodes"
+export SP4_MASTER SP4_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='SP4_MASTER;SP4_PORT;SP4_OUTPUT;SP4_STOP_AFTER;SPOTTC_ARM;WANDB_MODE;WANDB_PROJECT;WANDB_ENTITY'
+for SPOTTC_ARM in jsd_fs jsd_only ce_fs ce_only; do
+ export SPOTTC_ARM
+ for task_pass in uninterrupted resumed_first resumed_second; do
+  export SP4_STOP_AFTER=6
+  task_run=uninterrupted
+  if [[ "$task_pass" == resumed_first ]]; then task_run=resumed; export SP4_STOP_AFTER=3; fi
+  if [[ "$task_pass" == resumed_second ]]; then task_run=resumed; fi
+  export SP4_OUTPUT="$task_stage/validation/$SPOTTC_ARM/$task_run"
+  mpirun -np 8 --hostfile "$task_stage/validation/nodes" --map-by ppr:1:node --bind-to none bash "$task_stage/worker.sh"
+ done
+ "$MFA_PYTHON" "$task_stage/verify.py" --arm "$SPOTTC_ARM" --write-marker
+done
+"$MFA_PYTHON" -c 'import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); r=[json.load(open(p/(a.upper()+"_8GPU_PASS.json"))) for a in ("jsd_fs","jsd_only","ce_fs","ce_only")]; assert len({x["initialization_sha256"] for x in r})==1; (p/"ALL_ARMS_PASS.json").write_text(json.dumps(dict(status="passed",arms=r),indent=2)+"\n")' "$task_stage"

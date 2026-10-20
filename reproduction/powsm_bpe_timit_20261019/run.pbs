@@ -1,0 +1,45 @@
+#!/bin/bash
+#PBS -N powsm_text
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+SECONDS=0
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+export WANDB_RUN_GROUP=powsm_bpe_timit_20261019
+export OTTC_EVAL_UPLOAD=0
+recipe_root="$PWD/reproduction/powsm_bpe_timit_20261019"
+cost=${POWSM_COST:?Specify jsd or ce}
+case "$cost" in jsd|ce) ;; *) exit 2 ;; esac
+"$LIBRI_PYTHON" -u "$recipe_root/dispatch.py" --verify
+"$LIBRI_PYTHON" -u "$recipe_root/train.py" --check
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 10 >> "$recipe_root/jobs/${PBS_JOBID}_telemetry.csv" &
+telemetry_pid=$!
+trap 'kill "$telemetry_pid" 2>/dev/null || true' EXIT
+for head in ottc spottc_s3t2; do
+    smoke_dir="$recipe_root/smoke/${head}__${cost}"
+    if [[ ! -f "$smoke_dir/PASS.json" ]]; then
+        if [[ ! -f "$smoke_dir/LATEST_STATE.json" ]]; then
+            "$LIBRI_PYTHON" -u "$recipe_root/train.py" --head "$head" --cost "$cost" --smoke --stop-after-steps 1
+        fi
+        "$LIBRI_PYTHON" -u "$recipe_root/train.py" --head "$head" --cost "$cost" --smoke
+    fi
+done
+for head in ottc spottc_s3t2; do
+    model_dir="$recipe_root/models/${head}__${cost}"
+    if [[ -f "$model_dir/BENCHMARK_COMPLETE.json" ]]; then continue; fi
+    remaining=$((10800 - SECONDS))
+    if [[ "$remaining" -lt 300 ]]; then
+        "$LIBRI_PYTHON" -u "$recipe_root/dispatch.py" --continue-cost "$cost"
+        exit 0
+    fi
+    "$LIBRI_PYTHON" -u "$recipe_root/train.py" --head "$head" --cost "$cost" --max-seconds "$remaining"
+    if [[ ! -f "$model_dir/BENCHMARK_COMPLETE.json" ]]; then
+        "$LIBRI_PYTHON" -u "$recipe_root/dispatch.py" --continue-cost "$cost"
+        exit 0
+    fi
+done

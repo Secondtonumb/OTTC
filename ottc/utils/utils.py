@@ -12,7 +12,6 @@ import random
 import re
 import pandas as pd
 from typing import Any, Dict, List, Set, Tuple
-from IPython.display import display, HTML
 
 from ottc.config.constants import BORDERING_TOKEN, SPLITTING_DOUBLE_LETTER_TOKEN, PIPE_TOKEN
 
@@ -88,6 +87,7 @@ def show_random_elements(dataset: Dataset, num_examples: int = 10) -> None:
         AssertionError: If `num_examples` is greater than the number of elements in `dataset`.
     """
     
+    from IPython.display import display, HTML
     # Check if num_examples is valid
     assert num_examples <= len(dataset), "Can't pick more elements than there are in the dataset."
 

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#PBS -N libri_gpu_cost
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+root=/work/gm64/m64000/OTTC
+suite=$root/reproduction/english_suite
+cd "$root"
+output="$suite/gpu_cost_libri_${PBS_JOBID}"
+mkdir -p "$output/source"
+cp "$suite/benchmark_libri_gpu_cost.py" "$suite/gpu_cost_plan.py" "$suite/gpu_cost_libri.pbs" "$output/source/"
+sha256sum "$output"/source/* > "$output/source.sha256"
+exec > >(tee "$output/job.log") 2>&1
+export PYTHONPATH="$root/reproduction/vendor:$root"
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0 WANDB_MODE=online
+python=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+"$python" "$output/source/gpu_cost_plan.py" --output "$output"
+nvidia-smi --query-gpu=timestamp,name,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw,power.limit --format=csv -l 1 > "$output/gpu.csv" &
+monitor=$!
+trap 'kill "$monitor" 2>/dev/null || true' EXIT
+timeout --signal=TERM --kill-after=15 1100 "$python" -u "$output/source/benchmark_libri_gpu_cost.py" --output "$output"
+test -s "$output/BENCHMARK_COMPLETE.json"

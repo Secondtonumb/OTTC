@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#PBS -N mfa_current_dev_test
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export MFA_PYTHON=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export PYTHONPATH=/work/gm64/m64000/zipa/mfa_miyabi_20260922/python_site
+export WANDB_MODE=online CUDA_VISIBLE_DEVICES=0
+source /work/gm64/m64000/zipa/mfa_miyabi_20260922/zipa/experiments/mfa_zapformer/env.sh
+"$MFA_PYTHON" -u reproduction/english_suite/evaluate_mfa.py --arm ctc --checkpoint reproduction/english_suite/mfa_models/ctc/step-000024514.pt
+"$MFA_PYTHON" -u reproduction/english_suite/evaluate_mfa.py --arm ottc --checkpoint reproduction/english_suite/mfa_models/ottc/step-000022763.pt
+"$MFA_PYTHON" -u reproduction/english_suite/evaluate_mfa.py --arm spottc --checkpoint reproduction/english_suite/mfa_models/spottc/step-000020664.pt
+"$MFA_PYTHON" -u reproduction/english_suite/evaluate_mfa.py --arm film_k4 --checkpoint reproduction/english_suite/mfa_validation/3507763.opbs/film_k4/step-000000030.pt --limit 2
+"$MFA_PYTHON" -c 'import json; from pathlib import Path; Path("reproduction/english_suite/MFA_EVAL_GATE_PASS.json").write_text(json.dumps({"status":"PASS","native_audio_only_replay":["ctc","ottc","spottc","film_k4"],"ctc_ottc_spottc_full_dev_test":True,"film_validation_limit":2})+"\n")'
+"$MFA_PYTHON" reproduction/english_suite/summarize_results.py

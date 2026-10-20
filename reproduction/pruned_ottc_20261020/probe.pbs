@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N pruned_ottc_check
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+: "${PBS_JOBID:?PBS GPU allocation required}"
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0 WANDB_MODE=disabled
+recipe="$PWD/reproduction/pruned_ottc_20261020"
+output="$recipe/checks/gpu_${PBS_JOBID%%.*}_$(date -u +%Y%m%dT%H%M%SZ)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+"$LIBRI_PYTHON" -u "$recipe/gpu_probe.py" --output "$output" --chunk-size 128 --repeats 2

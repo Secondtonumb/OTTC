@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -N s3t2_fce_validate
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/spottc_jsd_s3t2_framece_libri100_20261012/validation.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_dir=$PWD/reproduction/spottc_jsd_s3t2_framece_libri100_20261012
+source "$task_dir/environment.sh"
+sha256sum -c "$task_dir/runtime.sha256"
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE=offline
+mkdir -p "$task_dir/validation"
+"$MFA_PYTHON" -u "$task_dir/validate.py"
+"$MFA_PYTHON" -u "$task_dir/prepare.py" --features --workers 8
+"$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 "$task_dir/train_framece.py" \
+  --output "$task_dir/validation/train" --smoke --batch-size 2 --stop-after 1
+"$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 "$task_dir/train_framece.py" \
+  --output "$task_dir/validation/train" --smoke --batch-size 2 --stop-after 2
+test -s "$task_dir/validation/train/SMOKE_PASS.json"
+cp "$task_dir/validation/train/SMOKE_PASS.json" "$task_dir/validation/SMOKE_PASS.json"

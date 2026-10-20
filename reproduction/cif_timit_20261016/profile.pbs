@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#PBS -N cif_timit_probe
+#PBS -q short-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH="$PWD/reproduction/vendor:$PWD"
+export LD_LIBRARY_PATH="/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}"
+export OMP_NUM_THREADS=4
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export WANDB_MODE="${WANDB_MODE:-online}"
+export WANDB_LOG_MODEL=false
+unset WANDB_DISABLED
+CIF_PY=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+CIF_OUT="$PWD/reproduction/cif_timit_20261016/probes/${PBS_JOBID}"
+mkdir -p "$CIF_OUT"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 1 > "$CIF_OUT/telemetry.csv" &
+CIF_TELEMETRY=$!
+trap 'kill "$CIF_TELEMETRY" 2>/dev/null || true' EXIT
+"$CIF_PY" -u -m reproduction.cif_timit_20261016.train \
+  --output "$CIF_OUT/no_ctc" --ctc-weight 0 --profile --max-steps 4 \
+  --batch-size 64 --eval-limit 16 --evaluate-on-stop --max-wall-seconds 650
+"$CIF_PY" -u -m reproduction.cif_timit_20261016.train \
+  --output "$CIF_OUT/ctc_0p5" --ctc-weight 0.5 --profile --max-steps 4 \
+  --batch-size 64 --eval-limit 16 --evaluate-on-stop --max-wall-seconds 650
+"$CIF_PY" -u -m reproduction.cif_timit_20261016.train \
+  --output "$CIF_OUT/ottc_jsd_0p5" --ottc-weight 0.5 --profile --max-steps 4 \
+  --batch-size 64 --eval-limit 16 --evaluate-on-stop --max-wall-seconds 650

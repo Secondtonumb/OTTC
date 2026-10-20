@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#PBS -q debug-g
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -W group_list=gm64
+#PBS -j oe
+#PBS -N timit_zap_check
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_dir=/work/gm64/m64000/OTTC/reproduction/zapformer_timit_20261013
+task_validation="$task_dir/validation_${PBS_JOBID%%.*}"
+export WANDB_MODE=offline
+for task_cost in jsd ce; do
+  TIMIT_COST="$task_cost" TIMIT_OUTPUT="$task_validation/${task_cost}_continuous" \
+    bash "$task_dir/interactive.sh" --tiny --epochs 2 --train-limit 8 --eval-limit 2 \
+    --max-duration 4 --save-every 1 --average-period 2 --stop-after 4
+  TIMIT_COST="$task_cost" TIMIT_OUTPUT="$task_validation/${task_cost}_resume" \
+    bash "$task_dir/interactive.sh" --tiny --epochs 2 --train-limit 8 --eval-limit 2 \
+    --max-duration 4 --save-every 1 --average-period 2 --stop-after 2
+  TIMIT_COST="$task_cost" TIMIT_OUTPUT="$task_validation/${task_cost}_resume" \
+    bash "$task_dir/interactive.sh" --tiny --epochs 2 --train-limit 8 --eval-limit 2 \
+    --max-duration 4 --save-every 1 --average-period 2 --stop-after 4
+done
+source reproduction/zapformer_s3t2_native_20261012/environment.sh
+"$MFA_PYTHON" "$task_dir/check_validation.py" "$task_validation"
+TIMIT_OUTPUT="$task_validation/full_model" \
+  bash "$task_dir/interactive.sh" --epochs 1 --train-limit 4 --eval-limit 2 \
+  --max-duration 12 --save-every 2 --average-period 2

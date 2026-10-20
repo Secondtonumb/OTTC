@@ -9,6 +9,16 @@ SPDX-License-Identifier: MIT
 
 # OTTC: Optimal Temporal Transport Classification
 
+[全部当前实验结果、dev/test 覆盖与自动续训](reproduction/english_suite/RESULTS.md)。
+
+[已跑实验状态标记](reproduction/english_suite/EXPERIMENT_STATUS.md) · [声学前端差异](reproduction/english_suite/FRONTENDS.md)。
+
+CIF 音素分段基线：[TIMIT40，CE + quantity，及 CTC / upstream-JSD OTTC 辅助对照](reproduction/cif_timit_20261016/README.md)。
+
+本地英语音素实验：[最新四头训练与 K2-FSA / text-free 评估报告](reproduction/multihead_timit/notion_update/README.md)。
+TIMIT 的 CTC、OTTC CE、OTTC 上游 jsd 均已完成 40 轮；报告包含训练 loss 曲线。
+后续全套训练：[LibriSpeech 100h / 960h 与 MFA English 调度记录](reproduction/english_suite/README.md)。
+
 Implementation of the **Optimal Temporal Transport Classification (OTTC)** loss introduced in
 *A Differentiable Alignment Framework for Sequence-to-Sequence Modeling via Optimal Transport*
 (Kaloga et al., 2025). OTTC replaces the non-differentiable alignment surrogate used by CTC with a

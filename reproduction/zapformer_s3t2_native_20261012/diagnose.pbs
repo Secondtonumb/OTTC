@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N native_s3t2_probe
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012/diagnostics.log
+set -euo pipefail
+task_dir=/work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012
+source "$task_dir/environment.sh"
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE=offline
+cd /work/gm64/m64000/OTTC
+"$MFA_PYTHON" -u "$task_dir/diagnose.py" ${S3T2_PROBE_ARGS:-}

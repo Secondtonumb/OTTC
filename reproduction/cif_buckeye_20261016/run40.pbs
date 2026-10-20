@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#PBS -N cif_buckeye_40ep
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=08:00:00
+#PBS -j oe
+set -euo pipefail
+source /work/gm64/m64000/OTTC/reproduction/cif_buckeye_20261016/environment.sh
+"$CIF_PY" - <<'PY'
+import json,os
+from pathlib import Path
+from reproduction.cif_buckeye_20261016.data import ROOT,sha
+p=Path(os.environ['CIF_BUCKEYE_ROOT']);g=json.loads((p/'GPU_PROFILE_PASS.json').read_text())
+assert g['batch_size']==64
+for r in g['runs'].values():
+    for f,h in r['config']['sources_sha256'].items():
+        assert sha(ROOT/f)==h, f
+    assert r['config']['shared_data_sha256']==sha(ROOT/'reproduction/cif_timit_20261016/data.py')
+print('Profile and source gate PASS',flush=True)
+PY
+CIF_ARGS=()
+case "${CIF_VARIANT:?Set CIF_VARIANT}" in
+  no_ctc) ;;
+  ctc_0p5) CIF_ARGS=(--ctc-weight 0.5) ;;
+  ottc_jsd_0p5) CIF_ARGS=(--ottc-weight 0.5) ;;
+  *) exit 2 ;;
+esac
+mkdir -p "$CIF_BUCKEYE_ROOT/runs"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 1 > "$CIF_BUCKEYE_ROOT/runs/${CIF_VARIANT}_${PBS_JOBID}.telemetry.csv" &
+CIF_TELEMETRY=$!
+trap 'kill "$CIF_TELEMETRY" 2>/dev/null || true' EXIT
+"$CIF_PY" -u -m reproduction.cif_buckeye_20261016.train \
+  --output "$CIF_BUCKEYE_ROOT/runs/${CIF_VARIANT}_seed42" "${CIF_ARGS[@]}" \
+  --epochs 40 --batch-size 64 --max-wall-seconds 28200

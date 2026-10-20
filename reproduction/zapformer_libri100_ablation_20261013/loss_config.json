@@ -1,0 +1,13 @@
+{
+  "ottc_weight": 1.0,
+  "forward_sum_weight": 1.0,
+  "forward_sum_kind": "charsiu_positions",
+  "forward_sum_normalization": "target",
+  "forward_sum_reduction": "mean",
+  "forward_sum_blank_logprob": -1.0,
+  "forward_sum_temperature": 1.0,
+  "forward_sum_zero_infinity": true,
+  "forward_sum_ctc_device": "cpu",
+  "forward_sum_output_beam": 10.0,
+  "ottc_cost": "jsd_upstream"
+}

@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N zap_recipe_s3t2_scratch
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=08:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/english_suite/zapformer_recipe_s3t2_20261010/training_dispatch.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/english_suite/zapformer_recipe_s3t2_20261010/env.sh
+test -s "$RECIPE_ROOT/validation/SMOKE_PASS.json"
+test -s "$RECIPE_ROOT/validation/ddp/SMOKE_PASS.json"
+sha256sum -c "$RECIPE_ROOT/runtime.sha256"
+mkdir -p "$RECIPE_ROOT/training"
+exec >> "$RECIPE_ROOT/training/job.log" 2>&1
+exec 9> "$RECIPE_ROOT/training/.training.lock"
+flock 9
+if [[ -f "$RECIPE_ROOT/training/TRAIN_COMPLETE.json" ]]; then exit 0; fi
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$RECIPE_ROOT/training/nodes"
+IFS= read -r RECIPE_MASTER_ADDR < "$RECIPE_ROOT/training/nodes"
+export RECIPE_MASTER_ADDR
+export RECIPE_MASTER_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='RECIPE_ROOT;RECIPE_MASTER_ADDR;RECIPE_MASTER_PORT;PATH;PYTHONPATH;LD_LIBRARY_PATH;WANDB_PROJECT;WANDB_ENTITY;WANDB_MODE;PBS_JOBID'
+mpirun -np 8 --hostfile "$RECIPE_ROOT/training/nodes" --map-by ppr:1:node --bind-to none \
+  bash "$RECIPE_ROOT/worker.sh"
+"$RECIPE_PYTHON" "$RECIPE_ROOT/finish_segment.py"

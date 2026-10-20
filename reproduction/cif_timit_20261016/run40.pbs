@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#PBS -N cif_timit_40ep
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export WANDB_MODE="${WANDB_MODE:-online}"
+export CIF_MAX_WALL_SECONDS=6600
+case "${CIF_VARIANT:?Set CIF_VARIANT to no_ctc, ctc_0p5, or ottc_jsd_0p5}" in
+  no_ctc) export CIF_CTC_WEIGHT=0 CIF_OTTC_WEIGHT=0 ;;
+  ctc_0p5) export CIF_CTC_WEIGHT=0.5 CIF_OTTC_WEIGHT=0 ;;
+  ottc_jsd_0p5) export CIF_CTC_WEIGHT=0 CIF_OTTC_WEIGHT=0.5 ;;
+  *) exit 2 ;;
+esac
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 1 \
+  > "reproduction/cif_timit_20261016/train40_${CIF_VARIANT}_${PBS_JOBID}.telemetry.csv" &
+CIF_TELEMETRY=$!
+trap 'kill "$CIF_TELEMETRY" 2>/dev/null || true' EXIT
+bash reproduction/cif_timit_20261016/interactive.sh --epochs 40

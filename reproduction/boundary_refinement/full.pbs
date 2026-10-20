@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#PBS -q regular-g
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -W group_list=gm64
+#PBS -j oe
+#PBS -N ottc_cif_full
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+refiner_env=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda
+export CONDA_PREFIX="$refiner_env"
+export LD_LIBRARY_PATH="$refiner_env/lib:$refiner_env/lib64:${LD_LIBRARY_PATH:-}"
+export LD_PRELOAD="$refiner_env/lib/libgomp.so.1"
+export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 WANDB_MODE=offline
+refiner_output="${REFINEMENT_OUTPUT:-reproduction/boundary_refinement/results/full_${PBS_JOBID%%.*}}"
+mkdir -p "$refiner_output/provenance"
+cp reproduction/boundary_refinement/run.py reproduction/boundary_refinement/full.pbs \
+   ottc/models/alignment/cif_boundary.py ottc/models/alignment/ottc_mass_boundary.py \
+   "$refiner_output/provenance/"
+printf 'Full evaluation output: %s\n' "$refiner_output"
+for refiner_model in jsd_upstream ce; do
+  for refiner_split in dev test; do
+    "$refiner_env/bin/python" reproduction/boundary_refinement/run.py export \
+      --model "$refiner_model" --split "$refiner_split" --limit 0 \
+      --output "$refiner_output/$refiner_model/$refiner_split"
+    "$refiner_env/bin/python" reproduction/boundary_refinement/run.py evaluate-frozen \
+      --cache "$refiner_output/$refiner_model/$refiner_split" --max-shift-ms 20 \
+      --output "$refiner_output/$refiner_model/eval_$refiner_split"
+  done
+done

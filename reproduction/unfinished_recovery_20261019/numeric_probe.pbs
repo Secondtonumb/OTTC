@@ -1,0 +1,12 @@
+#!/bin/bash
+#PBS -N crottc_numeric
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+"$LIBRI_PYTHON" -u reproduction/unfinished_recovery_20261019/crottc_numeric_probe.py

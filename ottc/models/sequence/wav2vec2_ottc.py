@@ -141,6 +141,9 @@ class wvForOTTC(PreTrainedModel):
         if self.config.bins_metric == 'crossentropy':
             self.euclidian = False
             self.soft_before_euclidian = False 
+        elif self.config.bins_metric == 'jsd_standard':
+            self.euclidian = False
+            self.jsd = 'standard'
         else:
             if self.config.bins_metric == 'euclidian':
                 self.euclidian = True
@@ -149,7 +152,7 @@ class wvForOTTC(PreTrainedModel):
                     self.euclidian = False
                     self.jsd = True
                 else:
-                    raise ValueError(f"bins_metric should be 'crossentropy', 'euclidian' or 'softeuclidian' but got {config.bins_metric}")
+                    raise ValueError(f"bins_metric should be 'crossentropy', 'euclidian', 'jsd' or 'jsd_standard' but got {config.bins_metric}")
                
         # Feature extractor / Wav2Vec2 CNN
         self.wav2vec2 = Wav2Vec2Model.from_pretrained(config.wav2vec2_path)   
@@ -335,7 +338,7 @@ class wvForOTTC(PreTrainedModel):
         )
         input_lengths = self._get_feat_extract_output_lengths(self.wave2vec2_config, attention_mask.sum(-1)).to(torch.long)
         output_mask = self.create_attention_mask_from_input_sequence(input_lengths)   
-        weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )     
+        weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
 
         return logits, weights_logits, output_mask, hidden_states
 
@@ -397,10 +400,10 @@ class wvForOTTC(PreTrainedModel):
         output_mask = self.create_attention_mask_from_input_sequence(input_lengths)        
 
         if self.step < inital_phase_step or self.alignement_training_time:
-            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )  
+            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
         else:
             with torch.no_grad():
-                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )  
+                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
 
         return logits, weights_logits, output_mask
 
@@ -459,10 +462,10 @@ class wvForOTTC(PreTrainedModel):
         output_mask = self.create_attention_mask_from_input_sequence(input_lengths)        
 
         if self.step < inital_phase_step or self.alignement_training_time:
-            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )  
+            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
         else:
             with torch.no_grad():
-                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )  
+                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
 
         return logits, weights_logits, output_mask   
 
@@ -514,9 +517,9 @@ class wvForOTTC(PreTrainedModel):
         output_mask = self.create_attention_mask_from_input_sequence(input_lengths)   
         if self.step >= stop_steps - 1:
             with torch.no_grad():
-                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )
+                weights_logits = F.softmax( self.lm_weight(hidden_states2).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
         else:
-            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze().masked_fill_(output_mask == 0, - torch.inf ) )     
+            weights_logits = F.softmax( self.lm_weight(hidden_states).squeeze(-1).masked_fill_(output_mask == 0, - torch.inf ) )
 
 
         return logits, weights_logits, output_mask
@@ -551,6 +554,13 @@ class wvForOTTC(PreTrainedModel):
         else:
             raise ValueError(f"forward_type {self.forward_type} not recognized")
         
+        # Inference must depend only on audio. Transport is needed only for loss.
+        if labels is None:
+            if not return_dict:
+                return (logits,)
+            return CausalLMOutput(logits=logits,
+                                  hidden_states=(weights_logits, output_mask))
+        labels = labels.clone()
         labels_mask = (labels >= 0).float()
         labels[labels == -100] = 0 # value choosen not important since it will be masked
         one_hot_labels = F.one_hot(labels, num_classes=self.config.vocab_size)

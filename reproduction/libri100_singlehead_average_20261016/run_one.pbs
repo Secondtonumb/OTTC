@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N libri100_avg
+#PBS -q short-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri100_singlehead_20261014/environment.sh
+export WANDB_RUN_GROUP=libri100_singlehead_average_20261016
+objective=${LIBRI_OBJECTIVE:?Set ce, jsd_upstream, or jsd_standard}
+task=${LIBRI_AVG_TASK:-last3}
+status=0
+"$LIBRI_PYTHON" -u reproduction/libri100_singlehead_average_20261016/short_worker.py --objective "$objective" --task "$task" \
+    >> "reproduction/libri100_singlehead_average_20261016/worker_${objective}_${task}.log" 2>&1 || status=$?
+printf '%s\n' "$status" > "reproduction/libri100_singlehead_average_20261016/worker_${objective}_${task}_exit_code.txt"
+exit "$status"

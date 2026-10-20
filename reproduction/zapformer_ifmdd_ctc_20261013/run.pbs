@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -N zap_ifmdd_mfa_ctc
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_ctc_20261013/training.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_ctc_20261013
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE="${WANDB_MODE:-online}"
+task_output="${IFMDD_CTC_OUTPUT:-$task_stage/training}"
+mkdir -p "$task_output"
+exec 9> "$task_output/.training.lock"
+flock -n 9 || { echo 'Experiment already running'; exit 1; }
+if [[ -s "$task_output/TRAIN_COMPLETE.json" ]]; then exit 0; fi
+"$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 \
+  "$task_stage/train_ctc.py" --output "$task_output" \
+  --manifest /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_data_20261012/training.json \
+  --epochs "${IFMDD_CTC_EPOCHS:-30}" --base-lr .02 --max-duration 640 \
+  --encoder-aux-loss-scale 0 --save-every 50 --eval-every 100 \
+  --average-period 200 --keep-last 0 --max-wall-seconds 13800

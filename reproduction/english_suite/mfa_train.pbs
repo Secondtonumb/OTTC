@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#PBS -N mfa_full_train
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=16:mpiprocs=1
+#PBS -l walltime=08:00:00
+#PBS -j oe
+set -euo pipefail
+suite=/work/gm64/m64000/OTTC/reproduction/english_suite
+test -s "$suite/MFA_GATE_PASS.json"
+sha256sum -c "$suite/mfa_runtime.sha256"
+case "${ARM:?}" in ctc|ottc|spottc|film_k4) ;; *) exit 2;; esac
+export MFA_OUTPUT="$suite/mfa_models/$ARM"
+mkdir -p "$MFA_OUTPUT"
+exec 9> "$MFA_OUTPUT/.training.lock"
+flock 9
+if [[ -f "$MFA_OUTPUT/TRAIN_COMPLETE.json" ]]; then exit 0; fi
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$MFA_OUTPUT/nodes"
+export MFA_MASTER_ADDR=$(head -1 "$MFA_OUTPUT/nodes")
+export MFA_MASTER_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export MFA_USE_LOCAL_RESUME=1 WANDB_RUN_GROUP=mfa_english_full_original_config
+export OMPI_MCA_mca_base_env_list='MFA_MASTER_ADDR;MFA_MASTER_PORT;MFA_OUTPUT;MFA_USE_LOCAL_RESUME;WANDB_RUN_GROUP;PATH;LD_LIBRARY_PATH'
+mpirun -np 8 --hostfile "$MFA_OUTPUT/nodes" --map-by ppr:1:node --bind-to none bash "$suite/mfa_worker.sh" "$ARM"
+printf 'Allocation segment finished; inspect checkpoint progress for ten-epoch completion.\n' > "$MFA_OUTPUT/SEGMENT_EXIT_OK"
+LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-} \
+  /work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python "$suite/mfa_finish_segment.py" "$ARM"

@@ -1,0 +1,28 @@
+#!/bin/bash
+#PBS -N timit_ssl10
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+SECONDS=0
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+ssl_root="$PWD/reproduction/timit_ssl_native10_20261019"
+ssl_recipe=${SSL_TIMIT_RECIPE:?Exact recipe required}
+mkdir -p "$ssl_root/profiles/$ssl_recipe"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 >> "$ssl_root/profiles/$ssl_recipe/telemetry.csv" &
+ssl_telemetry=$!
+trap 'kill "$ssl_telemetry" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u "$ssl_root/validate.py" --device cuda --full-ssl
+if ! "$LIBRI_PYTHON" -c 'import json,sys; from pathlib import Path; from reproduction.timit_ssl_native10_20261019.common import source_hashes; p=Path(sys.argv[1]); sys.exit(0 if p.exists() and json.loads(p.read_text())["source_sha256"]==source_hashes() else 1)' "$ssl_root/profiles/$ssl_recipe/PASS.json"; then
+    "$LIBRI_PYTHON" -u "$ssl_root/train.py" --recipe "$ssl_recipe" --profile
+fi
+ssl_train_seconds=$((6000 - SECONDS))
+if [ "$ssl_train_seconds" -lt 60 ]; then ssl_train_seconds=60; fi
+"$LIBRI_PYTHON" -u "$ssl_root/train.py" --recipe "$ssl_recipe" --max-seconds "$ssl_train_seconds"
+if [ ! -f "$ssl_root/models/$ssl_recipe/BENCHMARK_COMPLETE.json" ]; then
+    /opt/pbs/bin/qsub -v "SSL_TIMIT_RECIPE=$ssl_recipe" -o "$ssl_root/resume_${PBS_JOBID}.log" "$ssl_root/run_one.pbs" > "$ssl_root/models/$ssl_recipe/continuation_job.txt"
+fi

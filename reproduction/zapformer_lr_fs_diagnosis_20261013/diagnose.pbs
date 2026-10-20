@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N zapformer_lr_fs
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_lr_fs_diagnosis_20261013/diagnose.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+export WANDB_CACHE_DIR=/work/gm64/m64000/OTTC/reproduction/zapformer_lr_fs_diagnosis_20261013/wandb_cache
+"$MFA_PYTHON" reproduction/zapformer_lr_fs_diagnosis_20261013/diagnose.py

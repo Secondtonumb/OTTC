@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#PBS -N libri100_jsd_fabench
+#PBS -q debug-mig
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=4:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4
+export WANDB_MODE=online WANDB_LOG_MODEL=false WANDB_WATCH=false
+task_python=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+run_dir=reproduction/fabench_jsd_20261009
+for cell in timit buckeye_processed; do
+    "$task_python" -u "$run_dir/run.py" --cell "$cell" --smoke
+    "$task_python" -u "$run_dir/score.py" --cell "$cell" --smoke
+    "$task_python" -u "$run_dir/run.py" --cell "$cell"
+    "$task_python" -u "$run_dir/score.py" --cell "$cell"
+done

@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N ifmdd_spottc_perf
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_libri100_four_20261013/benchmark_onegpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+task_stage=reproduction/zapformer_ifmdd_libri100_four_20261013
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE="${WANDB_MODE:-online}"
+"$MFA_PYTHON" "$task_stage/check_parity.py" --device cuda --output "$task_stage/PARITY_GPU_PASS.json"
+"$MFA_PYTHON" "$task_stage/test_criterion.py" --gpu
+for task_arm in jsd_fs jsd_only ce_fs ce_only; do
+  for task_duration in 320 640; do
+    "$MFA_PYTHON" "$task_stage/benchmark.py" --arm "$task_arm" --duration "$task_duration"
+  done
+done
+"$MFA_PYTHON" "$task_stage/select_batch.py"

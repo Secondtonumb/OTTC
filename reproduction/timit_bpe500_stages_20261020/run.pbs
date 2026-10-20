@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N b500_ctc
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+: "${PBS_JOBID:?PBS GPU allocation required}"
+case "${BPE_STAGE:-}" in ctc|ottc_ce|spottc_ce|spottc_jsd) ;; *) exit 2 ;; esac
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+export WANDB_RUN_GROUP=timit_bpe500_stages_20261020
+SECONDS=0
+recipe="$PWD/reproduction/timit_bpe500_stages_20261020"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+"$LIBRI_PYTHON" -u "$recipe/train.py" --check
+budget=$(( ${BPE_SECONDS:-6000} - SECONDS ))
+if (( budget < 180 )); then exit 75; fi
+"$LIBRI_PYTHON" -u "$recipe/train.py" --run-stage --stage "$BPE_STAGE" --max-seconds "$budget"

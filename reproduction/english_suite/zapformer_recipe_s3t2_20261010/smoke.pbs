@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N zap_recipe_s3t2_smoke
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/english_suite/zapformer_recipe_s3t2_20261010/smoke.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/english_suite/zapformer_recipe_s3t2_20261010/env.sh
+export CUDA_VISIBLE_DEVICES=0
+"$RECIPE_PYTHON" -u "$RECIPE_ROOT/validate.py"
+"$RECIPE_PYTHON" -u "$RECIPE_ROOT/validate.py" --resume-phase
+"$RECIPE_PYTHON" -u "$RECIPE_ROOT/validate.py" --full
+"$RECIPE_PYTHON" -u "$RECIPE_ROOT/validate.py" --full --resume-phase
+"$RECIPE_PYTHON" "$RECIPE_ROOT/publish_validation.py"
+

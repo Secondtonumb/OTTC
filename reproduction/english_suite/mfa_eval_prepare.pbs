@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#PBS -N mfa_eval_prepare
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python -u reproduction/english_suite/prepare_mfa_eval.py

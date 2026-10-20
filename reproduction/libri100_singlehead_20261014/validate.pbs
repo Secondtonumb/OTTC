@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -N libri100_single3_smoke
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=3:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/libri100_singlehead_20261014/validation.log
+set -euo pipefail
+export LIBRI_VALIDATE_ONLY=1
+exec bash /work/gm64/m64000/OTTC/reproduction/libri100_singlehead_20261014/run_all.sh

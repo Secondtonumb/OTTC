@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#PBS -N timit_fourhead_objective
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+test -f reproduction/multihead_timit/validation/GPU_SMOKE_COMPLETE
+case "${OBJECTIVE:?Submit with -v OBJECTIVE=ctc, ce, or jsd_upstream}" in
+  ctc) configuration_rank=0;;
+  ce) configuration_rank=1;;
+  jsd_upstream) configuration_rank=2;;
+  *) exit 2;;
+esac
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4
+export WANDB_MODE=online WANDB_LOG_MODEL=false WANDB_WATCH=false
+export FOURHEAD_EXTERNAL_JOB=1
+OMPI_COMM_WORLD_RANK="$configuration_rank" bash reproduction/multihead_timit/train_rank.sh
+# Serialize summary writers when independently running jobs finish together.
+exec 8> reproduction/multihead_timit/.summary.lock
+flock 8
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python reproduction/multihead_timit/summarize.py

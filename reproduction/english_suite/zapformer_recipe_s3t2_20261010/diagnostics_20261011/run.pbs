@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N zap_recipe_resume_diag
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/english_suite/zapformer_recipe_s3t2_20261010/diagnostics_20261011/job.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/english_suite/zapformer_recipe_s3t2_20261010/env.sh
+export CUDA_VISIBLE_DEVICES=0
+DIAG_ROOT="$RECIPE_ROOT/diagnostics_20261011"
+"$RECIPE_PYTHON" -u "$DIAG_ROOT/diagnose.py"
+"$RECIPE_PYTHON" -u "$DIAG_ROOT/diagnose.py" --resume
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+"$RECIPE_PYTHON" -u "$DIAG_ROOT/diagnose.py" --deterministic
+"$RECIPE_PYTHON" -u "$DIAG_ROOT/diagnose.py" --deterministic --resume
+"$RECIPE_PYTHON" -u "$DIAG_ROOT/publish.py"

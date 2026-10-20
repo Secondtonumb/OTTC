@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N zap_topology_eval
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_topology_decode_20261013/evaluate.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+export WANDB_CACHE_DIR=/work/gm64/m64000/OTTC/reproduction/zapformer_topology_decode_20261013/wandb_cache
+"$MFA_PYTHON" reproduction/zapformer_topology_decode_20261013/evaluate.py

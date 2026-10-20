@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#PBS -N ottc_fused_smoke
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export OMP_NUM_THREADS=4
+unset WANDB_DISABLED
+export WANDB_PROJECT=${WANDB_PROJECT:-ottc-timit-reproduction}
+export WANDB_ENTITY=${WANDB_ENTITY:-kevingenghaopeng-}
+export WANDB_MODE=${WANDB_MODE:-online}
+export WANDB_LOG_MODEL=false
+export WANDB_WATCH=false
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+PY=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+"$PY" -u reproduction/launch.py --loss ottc --smoke
+"$PY" -u reproduction/evaluate.py --loss ottc --smoke
+"$PY" -u reproduction/launch.py --loss ctc --smoke
+"$PY" -u reproduction/evaluate.py --loss ctc --smoke

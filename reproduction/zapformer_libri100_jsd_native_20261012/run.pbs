@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N libri100_native_jsd
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_jsd_native_20261012/dispatch.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_native=/work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012
+task_output=/work/gm64/m64000/OTTC/reproduction/zapformer_libri100_jsd_native_20261012/training
+source "$task_native/environment.sh"
+"$MFA_PYTHON" "$task_native/validate.py" --check-acceptance all
+"$MFA_PYTHON" - <<'PY'
+import json,sys
+sys.path.insert(0,'reproduction/zapformer_s3t2_native_20261012')
+from validate import source_identity
+assert json.load(open('reproduction/zapformer_native_acceptance_20261012/results/EPOCH_PASS.json'))['source_identity']==source_identity()
+PY
+mkdir -p "$task_output"
+exec 9> "$task_output/.training.lock"
+flock -n 9 || { echo 'Experiment already running'; exit 1; }
+if [[ -s "$task_output/TRAIN_COMPLETE.json" ]]; then exit 0; fi
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE="${WANDB_MODE:-online}"
+"$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 \
+  "$task_native/train_s3t2.py" --objective jsd --output "$task_output" \
+  --jsd-manifest /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_data_20261012/training.json \
+  --epochs 10 --base-lr .02 --max-duration 640 --save-every 50 --eval-every 50 --average-period 200 --max-wall-seconds "${NATIVE_TASK_WALL_SECONDS:-13800}"

@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N ifmdd_spottc_four8
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_libri100_four_20261013/dispatch_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_ifmdd_libri100_four_20261013
+task_arm="${SPOTTC_ARM:?}"
+bash "$task_stage/run_ddp.sh" > "$task_stage/models/$task_arm/dispatch_${PBS_JOBID%%.*}.log" 2>&1
+if [[ ! -s "$task_stage/models/$task_arm/TRAIN_COMPLETE.json" ]]; then
+ /opt/pbs/bin/qsub -v "SPOTTC_ARM=$task_arm" -W "depend=afterok:${PBS_JOBID:?}" "$task_stage/run_8gpu.pbs" >> "$task_stage/models/$task_arm/continuations_8gpu.txt"
+fi

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#PBS -N timit_fourhead_ce_jsd_debug
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=2:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+test -f reproduction/multihead_timit/validation/GPU_SMOKE_COMPLETE
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4
+export WANDB_MODE=online WANDB_LOG_MODEL=false WANDB_WATCH=false
+export FOURHEAD_EXTERNAL_JOB=1 FOURHEAD_MAX_RUNTIME_SECONDS=1500
+export OMPI_MCA_mca_base_env_list='PYTHONPATH;LD_LIBRARY_PATH;HF_HUB_OFFLINE;TRANSFORMERS_OFFLINE;OMP_NUM_THREADS;WANDB_MODE;WANDB_LOG_MODEL;WANDB_WATCH;FOURHEAD_EXTERNAL_JOB;FOURHEAD_MAX_RUNTIME_SECONDS'
+# rank 0 runs CE, rank 1 runs upstream JSD; each Python child clears MPI ranks.
+mpirun -np 2 --map-by ppr:1:node --bind-to none bash -c 'export OMPI_COMM_WORLD_RANK=$((OMPI_COMM_WORLD_RANK+1)); exec bash reproduction/multihead_timit/train_rank.sh'
+exec 8> reproduction/multihead_timit/.summary.lock
+flock 8
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python reproduction/multihead_timit/summarize.py

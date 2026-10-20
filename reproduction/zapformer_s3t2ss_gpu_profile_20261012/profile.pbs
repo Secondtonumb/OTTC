@@ -1,0 +1,15 @@
+#!/bin/bash
+#PBS -N s3t2ss_gpu_use
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012/profile.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0 WANDB_MODE=offline
+task_profile=/work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012
+"$MFA_PYTHON" -m torch.distributed.run --standalone --nproc_per_node=1 \
+  "$task_profile/native_gpu_probe.py" --output "$task_profile/single_640" --max-duration 640

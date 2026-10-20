@@ -1,0 +1,28 @@
+#!/bin/bash
+#PBS -N native_ss_check8
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012/validation_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_native=/work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_native_20261012
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012
+source "$task_native/environment.sh"
+"$MFA_PYTHON" "$task_native/validate.py" --check-acceptance all
+export S3T2_TEST_NODES=8 S3T2_VALIDATION_OBJECTIVES=jsd
+export S3T2_VALIDATION_ROOT="$task_stage/validation_8gpu"
+mkdir -p "$S3T2_VALIDATION_ROOT"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$S3T2_VALIDATION_ROOT/nodes"
+test "$(wc -l < "$S3T2_VALIDATION_ROOT/nodes")" -eq 8
+IFS= read -r S3T2_MASTER_ADDR < "$S3T2_VALIDATION_ROOT/nodes"
+export S3T2_MASTER_ADDR S3T2_MASTER_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='S3T2_MASTER_ADDR;S3T2_MASTER_PORT;S3T2_TEST_NODES;S3T2_VALIDATION_OBJECTIVES;S3T2_VALIDATION_ROOT'
+mpirun -np 8 --hostfile "$S3T2_VALIDATION_ROOT/nodes" --map-by ppr:1:node --bind-to none \
+  bash "$task_native/validate_ddp_worker.sh"
+"$MFA_PYTHON" "$task_native/validate.py" --compare-root "$S3T2_VALIDATION_ROOT" --objectives jsd
+export NATIVE_PROFILE_NODES=8 NATIVE_PROFILE_DURATION=640
+bash /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012/profile_8gpu_dispatch.sh
+"$MFA_PYTHON" "$task_stage/verify_8gpu.py" --profile-job "${PBS_JOBID%%.*}" --write-marker

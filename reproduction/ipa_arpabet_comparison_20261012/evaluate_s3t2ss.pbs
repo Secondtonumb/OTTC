@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N spjsd_ss_arpa_eval
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/ipa_arpabet_comparison_20261012/s3t2ss_e5.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export MFA_PYTHON=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+export PYTHONPATH=/work/gm64/m64000/zipa/mfa_miyabi_20260922/python_site
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export MFA_TMPDIR=/tmp CUDA_VISIBLE_DEVICES=0
+source /work/gm64/m64000/zipa/mfa_miyabi_20260922/zipa/experiments/mfa_zapformer/env.sh
+"$MFA_PYTHON" -u reproduction/ipa_arpabet_comparison_20261012/evaluate_s3t2ss.py \
+  --checkpoint /work/gm64/m64000/fa-bench/data/mfa_spottc_jsd_s3t2ss_10ms_20261011/training/step-000034436.pt \
+  --output reproduction/ipa_arpabet_comparison_20261012/s3t2ss_e5

@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -N native_ottc
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+SECONDS=0
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+native_recipe=${NATIVE_OTTC_RECIPE:?Specify the exact independent recipe}
+native_root="$PWD/reproduction/native_stride_ottc_20261018"
+mkdir -p "$native_root/profiles/$native_recipe"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 >> "$native_root/profiles/$native_recipe/telemetry.csv" &
+native_telemetry=$!
+trap 'kill "$native_telemetry" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u "$native_root/validate.py"
+if ! "$LIBRI_PYTHON" -c 'import json,sys; from pathlib import Path; from reproduction.native_stride_ottc_20261018.common import source_hashes; p=Path(sys.argv[1]); sys.exit(0 if p.exists() and json.loads(p.read_text())["source_sha256"]==source_hashes() else 1)' "$native_root/profiles/$native_recipe/PASS.json"; then
+    "$LIBRI_PYTHON" -u "$native_root/train.py" --recipe "$native_recipe" --profile
+fi
+# Profile + training use at most 100 minutes, reserving 20 minutes for
+# checkpoint writes and final benchmarks within the two-hour allocation.
+native_train_seconds=$((6000 - SECONDS))
+if [ "$native_train_seconds" -lt 60 ]; then native_train_seconds=60; fi
+"$LIBRI_PYTHON" -u "$native_root/train.py" --recipe "$native_recipe" --max-seconds "$native_train_seconds"
+if [ ! -f "$native_root/models/$native_recipe/BENCHMARK_COMPLETE.json" ]; then
+    /opt/pbs/bin/qsub -v "NATIVE_OTTC_RECIPE=$native_recipe" -o "$native_root/resume_${PBS_JOBID}.log" "$native_root/run_one.pbs" > "$native_root/models/$native_recipe/continuation_job.txt"
+fi

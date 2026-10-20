@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#PBS -N mfa_gpu_cost
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+set -euo pipefail
+suite=/work/gm64/m64000/OTTC/reproduction/english_suite
+cd "$suite"
+sha256sum -c mfa_runtime.sha256
+export COST_OUTPUT="$suite/gpu_cost_probe_${PBS_JOBID}"
+mkdir -p "$COST_OUTPUT/source"
+cp benchmark_mfa_gpu_cost.py gpu_cost_worker.sh gpu_cost_mfa.pbs summarize_gpu_cost.py "$COST_OUTPUT/source/"
+sha256sum "$COST_OUTPUT"/source/* > "$COST_OUTPUT/source.sha256"
+exec > >(tee "$COST_OUTPUT/job.log") 2>&1
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$COST_OUTPUT/nodes"
+test "$(wc -l < "$COST_OUTPUT/nodes")" -eq 8
+export COST_MASTER_ADDR=$(head -1 "$COST_OUTPUT/nodes")
+export COST_MASTER_PORT=$((32000 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='COST_MASTER_ADDR;COST_MASTER_PORT;COST_OUTPUT;PATH;LD_LIBRARY_PATH'
+timeout --signal=TERM --kill-after=15 1140 mpirun -np 8 --hostfile "$COST_OUTPUT/nodes" --map-by ppr:1:node --bind-to none bash "$COST_OUTPUT/source/gpu_cost_worker.sh"
+test -s "$COST_OUTPUT/BENCHMARK_COMPLETE.json"

@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -N native_s3t2_jsd
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012/jsd_dispatch.log
+set -euo pipefail
+export S3T2_STAGE=jsd S3T2_NODES=8 S3T2_EPOCHS=10
+exec bash /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012/dispatch.sh

@@ -35,6 +35,19 @@ def jensen_shannon_divergence(p, q):
     q = torch.log(q)
     return 0.5 * (F.kl_div(p, m, log_target=True, reduction='none') + F.kl_div(q, m, log_target=True, reduction= 'none'))
 
+def jensen_shannon_divergence_standard(logits, q):
+    """Standard JS: .5 KL(p || m) + .5 KL(q || m), m=(p+q)/2.
+
+    Return per-class contributions. Log-space predictions keep gradients finite
+    for very confident logits; xlogy gives the exact zero-target convention.
+    The upstream function above is retained for reproduction of bins_metric=jsd.
+    """
+    log_p = F.log_softmax(logits, dim=-1)
+    log_q = torch.where(q > 0, torch.log(q), -torch.inf)
+    log_m = torch.logaddexp(log_p, log_q) - np.log(2.0)
+    return 0.5 * (log_p.exp() * (log_p - log_m)
+                  + torch.xlogy(q, q) - q * log_m)
+
 def ot1d_transport(p_weights, q_weights):
     """Compute the 1D optimal transport plan between two discrete measures.
 
@@ -295,6 +308,10 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
     index_qy = index_qy[w_mask]
     w = w[w_mask]
     
+    if jsd == 'standard':
+        cross_list_ = jensen_shannon_divergence_standard(x[index_qx,:], y[index_qy,:].float()).sum(axis=1)
+        return (w * cross_list_).sum(), index_qx_, index_qy_, h_
+
     if jsd == True:
         cross_list_ = jensen_shannon_divergence(F.softmax(x[index_qx,:],dim = 1), y[index_qy,:].float()).sum(axis = 1)
         return (w * cross_list_).sum() , index_qx_, index_qy_ , h_
@@ -377,6 +394,10 @@ def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, e
     h = torch.diff(F.pad(cba, (1, 0)))  # 1-d transport w
     w = h[h >= 0]
      
+    if jsd == 'standard':
+        cross_list_ = jensen_shannon_divergence_standard(x[index_qx,:], y[index_qy,:].float()).sum(axis=1)
+        return (w * cross_list_).sum()
+
     if jsd == True:
         cross_list_ = jensen_shannon_divergence(F.softmax(x[index_qx,:],dim = 1), y[index_qy,:].float()).sum(axis = 1)
         return (w * cross_list_).sum()

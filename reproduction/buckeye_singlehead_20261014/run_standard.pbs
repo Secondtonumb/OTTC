@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N buckeye_stdjs40
+#PBS -q short-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/buckeye_singlehead_20261014/train_jsd_standard.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/buckeye_singlehead_20261014/environment.sh
+exec 9> reproduction/buckeye_singlehead_20261014/.jsd_standard.lock
+flock -n 9
+"$BUCKEYE_PYTHON" -u reproduction/check_js_cost.py
+"$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/standard_jsd.py train --smoke
+"$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/standard_jsd.py evaluate --smoke
+"$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/standard_jsd.py budget --max-wall-seconds 5900
+"$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/standard_jsd.py evaluate
+exec 8> reproduction/buckeye_singlehead_20261014/.report.lock
+flock 8
+"$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/summarize.py

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#PBS -N ottc_timit_time
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=8:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export OMP_NUM_THREADS=4
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python -u audits/20261007/time_timit.py

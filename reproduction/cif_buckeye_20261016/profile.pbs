@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#PBS -N cif_buckeye_profile
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+source /work/gm64/m64000/OTTC/reproduction/cif_buckeye_20261016/environment.sh
+"$CIF_PY" - <<'PY'
+import json
+from pathlib import Path
+r=Path('reproduction/cif_timit_20261016')
+for name, directory in json.loads((r/'active_runs.json').read_text()).items():
+    p=Path(directory); m=json.loads((p/'TRAIN_COMPLETE.json').read_text())
+    assert m['full_training_complete'] and m['progress']['epoch']==40 and m['progress']['step']==2920, name
+    for split in ['dev','test']:
+        f=json.loads((p/f'final_{split}.json').read_text())
+        assert not f['partial'] and f['audio_only'] and not f['forced_alignment'], name
+print('All TIMIT40 variants completed; starting Buckeye exact-recipe profile.',flush=True)
+PY
+export CIF_PROBE_ROOT="$CIF_BUCKEYE_ROOT/probes/$PBS_JOBID"
+mkdir -p "$CIF_PROBE_ROOT"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 1 > "$CIF_PROBE_ROOT/telemetry.csv" &
+CIF_TELEMETRY=$!
+trap 'kill "$CIF_TELEMETRY" 2>/dev/null || true' EXIT
+"$CIF_PY" -m unittest reproduction.cif_timit_20261016.test_cif
+for CIF_VARIANT in no_ctc ctc_0p5 ottc_jsd_0p5; do
+  CIF_ARGS=()
+  case "$CIF_VARIANT" in
+    ctc_0p5) CIF_ARGS=(--ctc-weight 0.5) ;;
+    ottc_jsd_0p5) CIF_ARGS=(--ottc-weight 0.5) ;;
+  esac
+  "$CIF_PY" -u -m reproduction.cif_buckeye_20261016.train \
+    --output "$CIF_PROBE_ROOT/$CIF_VARIANT" "${CIF_ARGS[@]}" \
+    --profile --max-steps 4 --batch-size 64 --eval-limit 16 --evaluate-on-stop --max-wall-seconds 900
+done
+"$CIF_PY" - <<'PY'
+import datetime,json,math,os
+from pathlib import Path
+r=Path(os.environ['CIF_PROBE_ROOT']); report={}
+for n in ['no_ctc','ctc_0p5','ottc_jsd_0p5']:
+    p=r/n; marker=json.loads((p/'PROBE_COMPLETE.json').read_text())
+    assert marker['progress']['step']==4
+    h=[json.loads(l) for l in (p/'history.jsonl').read_text().splitlines()]
+    h=[x for x in h if 'train_loss' in x]
+    assert len(h)==4 and all(math.isfinite(x['train_loss']) and math.isfinite(x['gradient_norm']) for x in h)
+    assert max(x['max_audio_seconds'] for x in h)>26
+    assert max(x['peak_allocated_GiB'] for x in h)<105
+    evals={s:json.loads((p/f'final_{s}.json').read_text()) for s in ['dev','test']}
+    assert all(x['utterances']==16 and x['audio_only'] and not x['forced_alignment'] for x in evals.values())
+    report[n]={'profile':str(p),'config':json.loads((p/'run_config.json').read_text()),
+        'peak_allocated_GiB':max(x['peak_allocated_GiB'] for x in h),
+        'warm_batch_seconds':sum(x['batch_seconds'] for x in h[1:])/3,
+        'warm_audio_seconds_per_wall_second':sum(x['audio_seconds'] for x in h[1:])/sum(x['batch_seconds'] for x in h[1:])}
+Path(os.environ['CIF_BUCKEYE_ROOT'],'GPU_PROFILE_PASS.json').write_text(json.dumps(
+    {'created_at':datetime.datetime.now().isoformat(),'batch_size':64,'runs':report},indent=2)+'\n')
+print('Buckeye three-way GPU profile PASS',flush=True)
+PY

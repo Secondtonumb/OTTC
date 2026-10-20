@@ -1,0 +1,17 @@
+#!/bin/bash
+#PBS -N native_ss_full8
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012/profile_8gpu_retry.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_native=/work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_native_20261012
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_libri100_s3t2ss_native_20261012
+source "$task_native/environment.sh"
+"$MFA_PYTHON" "$task_native/validate.py" --check-acceptance all
+export NATIVE_PROFILE_NODES=8 NATIVE_PROFILE_DURATION=640
+bash /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012/profile_8gpu_dispatch.sh
+"$MFA_PYTHON" "$task_stage/verify_8gpu.py" --profile-job "${PBS_JOBID%%.*}" --write-marker

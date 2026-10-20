@@ -1,0 +1,15 @@
+#!/bin/bash
+#PBS -N libri100_jsd_fs8
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_jsd_charsiu_fs_20261013/dispatch_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_jsd_charsiu_fs_20261013
+bash "$task_stage/run_ddp.sh"
+if [[ ! -s "$task_stage/training/TRAIN_COMPLETE.json" ]]; then
+  /opt/pbs/bin/qsub -W "depend=afterok:${PBS_JOBID:?}" "$task_stage/run_8gpu.pbs" >> "$task_stage/continuations_8gpu.txt"
+fi

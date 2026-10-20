@@ -1,0 +1,31 @@
+#!/bin/bash
+#PBS -N jsd50_resume_check8
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_libri100_jsd50_native_20261013/validation_8gpu.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+task_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_libri100_jsd50_native_20261013
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+export WANDB_MODE=offline
+mkdir -p "$task_stage/validation"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$task_stage/validation/nodes"
+test "$(wc -l < "$task_stage/validation/nodes")" -eq 8
+IFS= read -r JSD50_MASTER < "$task_stage/validation/nodes"
+export JSD50_MASTER JSD50_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='JSD50_MASTER;JSD50_PORT;JSD50_OUTPUT;JSD50_STOP_AFTER;WANDB_MODE'
+"$MFA_PYTHON" "$task_stage/prepare.py" --output "$task_stage/validation/uninterrupted" --validation
+"$MFA_PYTHON" "$task_stage/prepare.py" --output "$task_stage/validation/resumed" --validation
+for task_pass in uninterrupted resumed_first resumed_second; do
+  export JSD50_STOP_AFTER=1062
+  task_run=uninterrupted
+  if [[ "$task_pass" == resumed_first ]]; then task_run=resumed; export JSD50_STOP_AFTER=1061; fi
+  if [[ "$task_pass" == resumed_second ]]; then task_run=resumed; fi
+  export JSD50_OUTPUT="$task_stage/validation/$task_run"
+  mpirun -np 8 --hostfile "$task_stage/validation/nodes" --map-by ppr:1:node --bind-to none \
+    bash "$task_stage/worker.sh"
+done
+"$MFA_PYTHON" "$task_stage/verify.py" --write-marker

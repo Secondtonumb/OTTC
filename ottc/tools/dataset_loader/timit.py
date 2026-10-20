@@ -14,7 +14,8 @@ from ottc.config.path_config import (
     DATASETS_ROOT_PATH,
     HUGGINGFACE_CACHE,
 )
-TIMIT_DATASET_PATH = None
+from ottc.config import path_config
+TIMIT_DATASET_PATH = getattr(path_config, 'TIMIT_DATASET_PATH', None)
 from transformers import Wav2Vec2CTCTokenizer, Wav2Vec2PhonemeCTCTokenizer, PreTrainedTokenizerFast
 import datasets
 from ottc.utils.utils import get_vocab_from_text, get_vocab_from_phoneme
@@ -175,7 +176,8 @@ def load_timit(
         dataset_ = datasets.load_dataset(
             './ottc/tools/dataset_loader/custom_huggingface_loader/timit_custom_loader.py',
             data_dir=str(timit_root),
-            cache_dir=HUGGINGFACE_CACHE
+            cache_dir=HUGGINGFACE_CACHE,
+            trust_remote_code=True,
         )
         if test_name == 'kaldi_test':
             # if kaldi test is used"

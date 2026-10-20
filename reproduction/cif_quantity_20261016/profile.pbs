@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#PBS -N cif_q_profile
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+bash /work/gm64/m64000/OTTC/reproduction/cif_quantity_20261016/profile.sh

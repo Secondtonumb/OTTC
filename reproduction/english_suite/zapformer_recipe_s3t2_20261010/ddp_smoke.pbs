@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -N zap_recipe_ddp_smoke
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/english_suite/zapformer_recipe_s3t2_20261010/ddp_smoke.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/english_suite/zapformer_recipe_s3t2_20261010/env.sh
+test -s "$RECIPE_ROOT/validation/SMOKE_PASS.json"
+mkdir -p "$RECIPE_ROOT/validation/ddp"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$RECIPE_ROOT/validation/ddp/nodes"
+IFS= read -r RECIPE_MASTER_ADDR < "$RECIPE_ROOT/validation/ddp/nodes"
+export RECIPE_MASTER_ADDR
+export RECIPE_MASTER_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='RECIPE_ROOT;RECIPE_MASTER_ADDR;RECIPE_MASTER_PORT;PATH;PYTHONPATH;LD_LIBRARY_PATH'
+mpirun -np 8 --hostfile "$RECIPE_ROOT/validation/ddp/nodes" --map-by ppr:1:node --bind-to none \
+  bash "$RECIPE_ROOT/ddp_worker.sh"
+

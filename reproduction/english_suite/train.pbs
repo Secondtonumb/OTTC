@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#PBS -N ottc_libri100_960
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=3:ncpus=32:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+test -s reproduction/english_suite/GPU_SMOKE_COMPLETE.json
+test -s reproduction/english_suite/data_audit.json
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4
+export WANDB_MODE=online WANDB_LOG_MODEL=false WANDB_WATCH=false
+export ENGLISH_SUITE_DEADLINE=$(($(date +%s)+82800))
+export OMPI_MCA_mca_base_env_list='PYTHONPATH;LD_LIBRARY_PATH;HF_HUB_OFFLINE;TRANSFORMERS_OFFLINE;OMP_NUM_THREADS;WANDB_MODE;WANDB_LOG_MODEL;WANDB_WATCH;ENGLISH_SUITE_DEADLINE'
+mpirun -np 3 --map-by ppr:1:node --bind-to none bash reproduction/english_suite/train_rank.sh
+if [[ "${CHAIN_CONTINUE:-0}" == 1 ]]; then
+  /work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python reproduction/english_suite/finish_segment.py
+fi

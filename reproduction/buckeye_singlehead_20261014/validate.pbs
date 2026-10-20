@@ -1,0 +1,15 @@
+#!/bin/bash
+#PBS -N buckeye_ot_valid
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/buckeye_singlehead_20261014/validation.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/buckeye_singlehead_20261014/environment.sh
+for objective in ce jsd_upstream; do
+    "$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/train.py --objective "$objective" --smoke
+    "$BUCKEYE_PYTHON" -u reproduction/buckeye_singlehead_20261014/evaluate.py --objective "$objective" --smoke
+done

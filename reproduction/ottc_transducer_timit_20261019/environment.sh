@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH="$PWD/reproduction/vendor:$PWD"
+export LD_LIBRARY_PATH="/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}"
+export OMP_NUM_THREADS=4 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export WANDB_MODE="${WANDB_MODE:-online}"
+export OTTC_EVAL_UPLOAD=0
+unset WANDB_DISABLED
+export OTTC_TRANS_PY=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+export OTTC_TRANS_ROOT="$PWD/reproduction/ottc_transducer_timit_20261019"

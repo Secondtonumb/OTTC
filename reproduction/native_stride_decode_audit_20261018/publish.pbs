@@ -1,0 +1,12 @@
+#!/bin/bash
+#PBS -N ottc_eval_publish
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/native_stride_decode_audit_20261018/publish.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+"$LIBRI_PYTHON" -u reproduction/native_stride_decode_audit_20261018/publish.py

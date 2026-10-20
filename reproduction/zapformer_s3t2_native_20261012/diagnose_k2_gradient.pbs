@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -N k2_gradient_check
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2_native_20261012/diagnostics_k2_gradient.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2_native_20261012/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+"$MFA_PYTHON" -u reproduction/zapformer_s3t2_native_20261012/diagnose_k2_gradient.py

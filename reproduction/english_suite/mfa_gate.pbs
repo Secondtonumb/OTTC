@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#PBS -N mfa_full_gate
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=16:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+base=/work/gm64/m64000/zipa/mfa_miyabi_20260922
+suite=/work/gm64/m64000/OTTC/reproduction/english_suite
+test -s "$base/DATA_VERIFIED.json"
+sha256sum -c "$suite/mfa_runtime.sha256"
+run="$suite/mfa_validation/${PBS_JOBID}"
+mkdir -p "$run"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$run/nodes"
+test "$(wc -l < "$run/nodes")" -eq 8
+export MFA_MASTER_ADDR=$(head -1 "$run/nodes")
+export MFA_MASTER_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export MFA_OUTPUT WANDB_RUN_GROUP=mfa_english_full_smoke
+export OMPI_MCA_mca_base_env_list='MFA_MASTER_ADDR;MFA_MASTER_PORT;MFA_OUTPUT;WANDB_RUN_GROUP;PATH;LD_LIBRARY_PATH'
+launch() {
+  mpirun -np 8 --hostfile "$run/nodes" --map-by ppr:1:node --bind-to none bash "$suite/mfa_worker.sh" "$@"
+}
+for arm in ctc ottc spottc film_k4; do
+  case "$arm" in ctc|ottc) stop=5283;; spottc) stop=3474;; film_k4) stop=30;; esac
+  export MFA_OUTPUT="$run/$arm"
+  launch "$arm" --stop-after-step "$stop" --audit
+done
+for arm in ctc film_k4; do
+  case "$arm" in ctc) saved=000005283; stop=5284;; film_k4) saved=000000030; stop=31;; esac
+  export MFA_OUTPUT="$run/${arm}_reload"
+  launch "$arm" --resume "$run/$arm/step-$saved.pt" --migration-contract "$run/$arm/run_config.json" --stop-after-step "$stop" --audit
+done
+LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-} \
+  /work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python "$suite/mfa_review_gate.py" "$run"
+cp "$run/GATE_PASS.json" "$suite/MFA_GATE_PASS.json"

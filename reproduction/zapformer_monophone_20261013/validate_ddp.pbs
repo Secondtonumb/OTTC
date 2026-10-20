@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -N monophone_ddp8
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=32:mpiprocs=1:mem=64gb
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_monophone_20261013/validate_ddp.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/zapformer_s3t2ss_native_20261012/environment.sh
+mono_stage=/work/gm64/m64000/OTTC/reproduction/zapformer_monophone_20261013
+mkdir -p "$mono_stage/validation_ddp"
+exec 9> "$mono_stage/validation_ddp/.validation.lock"
+flock -n 9 || exit 1
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$mono_stage/validation_ddp/nodes"
+test "$(wc -l < "$mono_stage/validation_ddp/nodes")" -eq 8
+IFS= read -r MONO_MASTER < "$mono_stage/validation_ddp/nodes"
+export MONO_MASTER MONO_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='MONO_MASTER;MONO_PORT'
+mpirun -np 8 --hostfile "$mono_stage/validation_ddp/nodes" --map-by ppr:1:node --bind-to none \
+  bash "$mono_stage/validate_worker.sh"
+"$MFA_PYTHON" "$mono_stage/check_validation.py"

@@ -1,0 +1,3 @@
+# Installed SDK; isolated optional report authoring dependency.
+wandb==0.21.0
+wandb-workspaces==0.4.5

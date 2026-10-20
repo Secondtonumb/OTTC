@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#PBS -N ottc_ar_probe
+#PBS -q short-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+set -euo pipefail
+source /work/gm64/m64000/OTTC/reproduction/ottc_transducer_timit_20261017/environment.sh
+OTTC_PROBE="$OTTC_TRANS_ROOT/profiles/$PBS_JOBID"
+mkdir -p "$OTTC_PROBE"
+exec >"$OTTC_PROBE/job.log" 2>&1
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 1 >"$OTTC_PROBE/telemetry.csv" &
+OTTC_TELEMETRY=$!
+trap 'kill "$OTTC_TELEMETRY" 2>/dev/null || true' EXIT
+"$OTTC_TRANS_PY" -m unittest reproduction.ottc_transducer_timit_20261017.test_model -v >"$OTTC_PROBE/model_tests.log" 2>&1
+"$OTTC_TRANS_PY" -u -m reproduction.ottc_transducer_timit_20261017.train \
+  --output "$OTTC_PROBE/training" --profile --max-steps 4 \
+  --batch-size 8 --accumulation-steps 8 --eval-limit 4 --evaluate-on-stop --max-wall-seconds 1200

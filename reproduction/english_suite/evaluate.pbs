@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#PBS -N ottc_libri_k2_eval
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=12:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH=/work/gm64/m64000/OTTC/reproduction/vendor:/work/gm64/m64000/OTTC
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib:${LD_LIBRARY_PATH:-}
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0
+export WANDB_MODE=online
+task_python=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python
+"$task_python" reproduction/check_alignment_decoders.py
+for dataset in libri100 libri960; do
+  for objective in ctc ce jsd_upstream; do
+    directory="reproduction/multihead_${dataset}"
+    if [[ -f "$directory/models/$objective/TRAIN_COMPLETE.json" && ! -f "$directory/evaluation_modes/$objective/EVAL_COMPLETE.json" ]]; then
+      "$task_python" -u reproduction/evaluate_multihead_modes.py --objective "$objective" --experiment "$directory"
+    fi
+  done
+done

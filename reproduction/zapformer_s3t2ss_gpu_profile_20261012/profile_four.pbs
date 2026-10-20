@@ -1,0 +1,11 @@
+#!/bin/bash
+#PBS -N zapformer_gpu_4
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=4:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:20:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012/four.log
+set -euo pipefail
+export NATIVE_PROFILE_NODES=4
+exec bash /work/gm64/m64000/OTTC/reproduction/zapformer_s3t2ss_gpu_profile_20261012/profile_ddp_dispatch.sh

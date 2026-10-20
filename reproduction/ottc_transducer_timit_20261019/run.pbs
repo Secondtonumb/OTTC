@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#PBS -N ottc_ar_timit40
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+source /work/gm64/m64000/OTTC/reproduction/ottc_transducer_timit_20261019/environment.sh
+OTTC_JOB_DIR="$OTTC_TRANS_ROOT/jobs/$PBS_JOBID"
+OTTC_RUN="$OTTC_TRANS_ROOT/runs/jsd_blankfree_seed42"
+mkdir -p "$OTTC_JOB_DIR"
+exec >"$OTTC_JOB_DIR/job.log" 2>&1
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv -l 2 >"$OTTC_JOB_DIR/telemetry.csv" &
+OTTC_TELEMETRY=$!
+trap 'kill "$OTTC_TELEMETRY" 2>/dev/null || true' EXIT
+"$OTTC_TRANS_PY" -m unittest reproduction.ottc_transducer_timit_20261019.test_model reproduction.ottc_transducer_timit_20261019.test_tracking -v >"$OTTC_JOB_DIR/tests.log" 2>&1
+"$OTTC_TRANS_PY" -u -m reproduction.ottc_transducer_timit_20261019.train \
+  --output "$OTTC_JOB_DIR/profile" --profile --max-steps 4 --batch-size 8 --accumulation-steps 8 \
+  --eval-limit 4 --evaluate-on-stop --max-wall-seconds 1200 --wandb-mode disabled
+test -f "$OTTC_JOB_DIR/profile/PROFILE_PASS.json"
+while [[ ! -f "$OTTC_RUN/TRAIN_COMPLETE.json" ]]; do
+  OTTC_REMAINING=$((3000 - SECONDS))
+  if (( OTTC_REMAINING < 300 )); then
+    printf 'Allocation budget reached; the full resume state is retained at %s\n' "$OTTC_RUN"
+    exit 0
+  fi
+  OTTC_SLICE=3300
+  if (( OTTC_REMAINING < OTTC_SLICE )); then OTTC_SLICE=$OTTC_REMAINING; fi
+  "$OTTC_TRANS_PY" -u -m reproduction.ottc_transducer_timit_20261019.train \
+    --output "$OTTC_RUN" --epochs 40 --batch-size 8 --accumulation-steps 8 \
+    --length-weight 1 --seed 42 --max-wall-seconds "$OTTC_SLICE"
+done
+"$OTTC_TRANS_PY" -u -m reproduction.ottc_transducer_timit_20261019.report --output "$OTTC_RUN"

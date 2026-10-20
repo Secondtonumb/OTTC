@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -N s3_quota_resume
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=01:00:00
+#PBS -j oe
+set -euo pipefail
+SECONDS=0
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+recovery_recipe=${SSL_TIMIT_RECIPE:?Exact unfinished S3 recipe required}
+recovery_root="$PWD/reproduction/timit_ssl_native10_20261019"
+exec 9>"$recovery_root/models/$recovery_recipe/.recovery_job.lock"
+flock -n 9 || exit 0
+if [ ! -f "$recovery_root/models/$recovery_recipe/RECOVERY_PASS.json" ]; then
+    "$LIBRI_PYTHON" -u reproduction/unfinished_recovery_20261019/recover_s3.py --recipe "$recovery_recipe"
+fi
+recovery_seconds=$((2400 - SECONDS))
+if [ "$recovery_seconds" -lt 60 ]; then recovery_seconds=60; fi
+"$LIBRI_PYTHON" -u reproduction/timit_ssl_native10_20261019/train.py --recipe "$recovery_recipe" --max-seconds "$recovery_seconds"
+if [ ! -f "$recovery_root/models/$recovery_recipe/BENCHMARK_COMPLETE.json" ]; then
+    /opt/pbs/bin/qsub -v "SSL_TIMIT_RECIPE=$recovery_recipe" -o "$recovery_root/resume_${PBS_JOBID}.log" "$PWD/reproduction/unfinished_recovery_20261019/recover_s3.pbs" > "$recovery_root/models/$recovery_recipe/continuation_job.txt"
+fi

@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -N ottc_redecode
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+native_audit_root="$PWD/reproduction/native_stride_decode_audit_20261018"
+native_audit_recipe=${NATIVE_AUDIT_RECIPE:?Specify an existing trained recipe}
+export CUDA_VISIBLE_DEVICES=0
+mkdir -p "$native_audit_root/results/$native_audit_recipe"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 > "$native_audit_root/results/$native_audit_recipe/telemetry.csv" &
+native_telemetry=$!
+trap 'kill "$native_telemetry" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u "$native_audit_root/redecode_fp32.py" --recipe "$native_audit_recipe"

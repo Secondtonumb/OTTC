@@ -1,0 +1,18 @@
+{
+  "updated_at": "2026-10-16T20:03:18.843640+09:00",
+  "recipe": "reproduction/cif_quantity_20261016",
+  "quantity_weight": 1,
+  "datasets": [
+    "buckeye",
+    "libri100"
+  ],
+  "variants": [
+    "CE+Quantity",
+    "CE+Quantity+CTC",
+    "CE+Quantity+OTTC"
+  ],
+  "status": "Q1 production submitted",
+  "submission_manifest": "reproduction/cif_quantity_20261016/SUBMITTED.json",
+  "excluded_recipe": "reproduction/cif_noquantity_20261016",
+  "interactive_job": "3568467.opbs"
+}
