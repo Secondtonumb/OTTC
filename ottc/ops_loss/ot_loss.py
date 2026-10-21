@@ -5,11 +5,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+import math
 import torch
 import torch.nn.functional as F
 from torch.autograd import Function
 from numba import cuda, float32, int32
 import numpy as np
+
+from ottc.ops_loss.temporal_smoothing import temporal_smoothing_loss
 
 batched_bucketize = torch.vmap(torch.bucketize)
 
@@ -222,7 +225,7 @@ def batched_ottc_loss_reference_implementation(p_weights, q_weights, pfeatures, 
 
     return torch.stack(batch_losses).sum()
     
-def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidian = False, jsd = False, entropy = 0.0, loss_options = ''):
+def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidian = False, jsd = False, entropy = 0.0, loss_options = '', *, smooth_weight = 0.0, smooth_tau = 4.0, smooth_mask = None):
     """Compute OTTC loss for batched data using bucketization.
     
     https://arxiv.org/pdf/2502.01588v1; equation (11)
@@ -255,12 +258,26 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
         Entropy regularization weight.
     loss_options : str, optional
         Additional weighting options (e.g., 'inverse_input_renorm').
+    smooth_weight : float, optional
+        Nonnegative temporal-smoothing weight; zero preserves the original
+        objective exactly. Smooths full log-probability distributions with a
+        detached previous frame, without argmax or frame-boundary labels.
+        Per-utterance valid-pair/class means are summed to match OTTC's batch
+        sum and support additive microbatch accumulation.
+    smooth_tau : float, optional
+        Truncation threshold on the log-probability difference; squared error
+        is capped at smooth_tau**2 (default 16).
+    smooth_mask : tensor (b, n), optional
+        Effective encoder output-frame mask for smoothing only. If omitted,
+        use an explicitly supplied amask. One of these masks is required when
+        smoothing is enabled; learned masses are not used to infer validity.
+        This separate mask does not change the original transport mask/path.
 
     Returns
     -------
     tuple
         ot_cost : float
-            Total optimal transport cost.
+            Original OTTC cost plus optional weighted temporal smoothing.
         index_qx_ : tensor
             Indices of matched source bins.
         index_qy_ : tensor
@@ -269,7 +286,21 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
             Transport plan weights.
     """
 
-        
+    if not math.isfinite(smooth_weight) or smooth_weight < 0:
+        raise ValueError('smooth_weight must be finite and nonnegative')
+    temporal_penalty = None
+    if smooth_weight > 0:
+        valid_frames = smooth_mask if smooth_mask is not None else amask
+        if valid_frames is None:
+            raise ValueError('Temporal smoothing requires smooth_mask or amask at encoder output-frame resolution')
+        # Keep x in [B,T,C] here, before transport flattens the batch/time axes.
+        temporal_penalty = smooth_weight * temporal_smoothing_loss(
+            x, valid_frames, tau=smooth_tau, reduction='sum')
+
+    def add_temporal(cost):
+        # No extra add/graph node at weight zero, including the default path.
+        return cost if temporal_penalty is None else cost + temporal_penalty
+
     if amask is None:
         amask = torch.ones(a.shape).to('cuda')
     if bmask is None:
@@ -310,21 +341,21 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
     
     if jsd == 'standard':
         cross_list_ = jensen_shannon_divergence_standard(x[index_qx,:], y[index_qy,:].float()).sum(axis=1)
-        return (w * cross_list_).sum(), index_qx_, index_qy_, h_
+        return add_temporal((w * cross_list_).sum()), index_qx_, index_qy_, h_
 
     if jsd == True:
         cross_list_ = jensen_shannon_divergence(F.softmax(x[index_qx,:],dim = 1), y[index_qy,:].float()).sum(axis = 1)
-        return (w * cross_list_).sum() , index_qx_, index_qy_ , h_
+        return add_temporal((w * cross_list_).sum()) , index_qx_, index_qy_ , h_
      
     if euclidian == True :
         cross_list_ = torch.sum((F.softmax(x[index_qx,:],dim = 1) -  y[index_qy,:].float())**2, axis = 1)
-        return (w * cross_list_).sum() , index_qx_, index_qy_ , h_
+        return add_temporal((w * cross_list_).sum()) , index_qx_, index_qy_ , h_
 
     if entropy > 0:
-        return (w * cross_list_).sum() - entropy * torch.sum(a * torch.log(a + 1e-12)), index_qx_, index_qy_ , h_        
+        return add_temporal((w * cross_list_).sum() - entropy * torch.sum(a * torch.log(a + 1e-12))), index_qx_, index_qy_ , h_
 
     cross_list_ = F.cross_entropy(x[index_qx,:] , y[index_qy,:].float(), reduction= 'none')
-    return (w * cross_list_).sum(),  index_qx_, index_qy_ , h_ 
+    return add_temporal((w * cross_list_).sum()),  index_qx_, index_qy_ , h_
 
 def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, entropy = 0.0, loss_options = ''):
     """Compute OTTC loss for batched data using concatenated distributions.

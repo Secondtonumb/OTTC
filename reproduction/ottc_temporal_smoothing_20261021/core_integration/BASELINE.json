@@ -1,0 +1,7 @@
+{
+  "source": "/work/gm64/m64000/OTTC/ottc/ops_loss/ot_loss.py",
+  "sha256": "165f62cbc096a7f5d9b218763fe8848d21bb69a4a17379ef077625ea3992e80f",
+  "snapshot": "ot_loss_before_temporal_smoothing.py",
+  "origin": "git HEAD, verified byte-identical to the pre-edit hash recorded in previous VALIDATION.json",
+  "purpose": "Pre-edit loss formula for exact default-off numerical and gradient replay"
+}
