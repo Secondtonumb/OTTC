@@ -138,12 +138,16 @@ class wvForOTTC(PreTrainedModel):
         self.count = 0
 
         self.jsd = False
+        self.divergence = None
         if self.config.bins_metric == 'crossentropy':
             self.euclidian = False
             self.soft_before_euclidian = False 
         elif self.config.bins_metric == 'jsd_standard':
             self.euclidian = False
             self.jsd = 'standard'
+        elif self.config.bins_metric in ('ag', 'kl', 'kl_reverse', 'jdiv'):
+            self.euclidian = False
+            self.divergence = self.config.bins_metric
         else:
             if self.config.bins_metric == 'euclidian':
                 self.euclidian = True
@@ -152,7 +156,7 @@ class wvForOTTC(PreTrainedModel):
                     self.euclidian = False
                     self.jsd = True
                 else:
-                    raise ValueError(f"bins_metric should be 'crossentropy', 'euclidian', 'jsd' or 'jsd_standard' but got {config.bins_metric}")
+                    raise ValueError(f"Unknown bins_metric {config.bins_metric!r}; expected crossentropy, euclidian, ag, jsd (legacy AG), jsd_standard, kl, kl_reverse, or jdiv")
                
         # Feature extractor / Wav2Vec2 CNN
         self.wav2vec2 = Wav2Vec2Model.from_pretrained(config.wav2vec2_path)   
@@ -596,7 +600,7 @@ class wvForOTTC(PreTrainedModel):
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
             
-            loss, index_logits, index_labels, wtransport = batched_ottc_loss_bucketized(logits, one_hot_labels, weights_logits, weights_labels, amask = None, bmask = labels_mask, euclidian = self.euclidian, jsd = self.jsd)
+            loss, index_logits, index_labels, wtransport = batched_ottc_loss_bucketized(logits, one_hot_labels, weights_logits, weights_labels, amask = None, bmask = labels_mask, euclidian = self.euclidian, jsd = self.jsd, divergence = self.divergence)
 
         if not return_dict:
             output = (logits,)

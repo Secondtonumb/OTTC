@@ -262,7 +262,8 @@ def main():
     parser.add_argument('--frozen_epochs_for_regfrozen', type=int, default = 30) # only for regfrozen forward type
     parser.add_argument('--loss_type', type=str, default='ottc', help='Type of loss to use (ctc).')
     parser.add_argument('--oracle_weights_model', type=str, default =None)
-    parser.add_argument('--bins_metric', type=str, default = 'crossentropy')
+    parser.add_argument('--bins_metric', type=str, default = 'crossentropy',
+                        help='OTTC cost: crossentropy, euclidian, ag, jsd (legacy AG), jsd_standard, kl (prediction||epsilon target), kl_reverse, jdiv (Jeffreys sum)')
     parser.add_argument('--final_layers', type=str, default = 'linear')
     parser.add_argument('--dump_eval_artifacts', action='store_true', help='Dump eval transcripts (and alignments for OTTC) after each evaluation epoch.')
     parser.add_argument('--wandb_project', default=os.environ.get('WANDB_PROJECT', tracking['project']))

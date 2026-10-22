@@ -17,19 +17,22 @@ from ottc.ops_loss.temporal_smoothing import temporal_smoothing_loss
 batched_bucketize = torch.vmap(torch.bucketize)
 
 def jensen_shannon_divergence(p, q):
-    """Compute the Jensen-Shannon divergence between two probability distributions.
+    """Legacy upstream name for epsilon-regularized AG divergence, not JS.
+
+    Computes .5 KL(m || p) + .5 KL(m || q_epsilon), m=(p+q_epsilon)/2.
+    The historical target perturbation is deliberately kept unchanged.
 
     Parameters
     ----------
     p : tensor (n, d)
-        The first probability distribution (logits or softmaxed).
+        The first probability distribution (already softmaxed, not logits).
     q : tensor (n, d)
         The second probability distribution (usually target).
 
     Returns
     -------
-    tensor (n,)
-        The Jensen-Shannon divergence between the two distributions (per example).
+    tensor (n, d)
+        Per-class AG contributions; sum the last dimension for the divergence.
     """
     q = q + (1-q)*1e-12 - q*1e-12
     m = 0.5 * (p + q)
@@ -37,6 +40,61 @@ def jensen_shannon_divergence(p, q):
     p = torch.log(p)
     q = torch.log(q)
     return 0.5 * (F.kl_div(p, m, log_target=True, reduction='none') + F.kl_div(q, m, log_target=True, reduction= 'none'))
+
+# Explicit name with exactly the historical numerical behavior.
+arithmetic_geometric_divergence = jensen_shannon_divergence
+
+
+def _kl_log_distributions(logits, q, eps):
+    if not math.isfinite(eps) or not 0 < eps < 1:
+        raise ValueError('eps must be finite and in (0, 1)')
+    # 1e-12 cannot be represented in fp16. Accumulate new costs in fp32
+    # under mixed precision; retain fp64 for numerical/gradient checks.
+    if logits.dtype in (torch.float16, torch.bfloat16):
+        logits = logits.float()
+    log_p = F.log_softmax(logits, dim=-1)
+    q = q.to(log_p.dtype).clamp_min(eps)
+    q = q / q.sum(dim=-1, keepdim=True)
+    return log_p, q.log()
+
+
+def kullback_leibler_divergence(logits, q, *, reverse=False, eps=1e-12):
+    """Per-class KL(p || q_eps); reverse=True gives KL(q_eps || p).
+
+    p=softmax(logits), q_eps=normalize(clamp(q, min=eps)). Regularizing
+    the target makes prediction-to-target KL finite for one-hot labels.
+    Uses natural logarithms and returns contributions without reduction.
+    """
+    log_p, log_q = _kl_log_distributions(logits, q, eps)
+    if reverse:
+        return log_q.exp() * (log_q - log_p)
+    return log_p.exp() * (log_p - log_q)
+
+
+def jeffreys_divergence(logits, q, *, eps=1e-12):
+    """Per-class J = KL(p || q_eps) + KL(q_eps || p), without a 1/2.
+
+    Uses the same normalized epsilon target and precision policy as KL.
+    """
+    log_p, log_q = _kl_log_distributions(logits, q, eps)
+    return (log_p.exp() - log_q.exp()) * (log_p - log_q)
+
+
+def _validate_divergence(divergence, jsd, euclidian):
+    if divergence is not None:
+        if divergence not in ('ag', 'kl', 'kl_reverse', 'jdiv'):
+            raise ValueError(f'Unknown divergence: {divergence!r}')
+        if jsd or euclidian:
+            raise ValueError('divergence cannot be combined with jsd or euclidian')
+
+
+def _divergence_cost(logits, targets, divergence):
+    if divergence == 'ag':
+        return arithmetic_geometric_divergence(logits.softmax(-1), targets).sum(-1)
+    if divergence == 'jdiv':
+        return jeffreys_divergence(logits, targets).sum(-1)
+    return kullback_leibler_divergence(
+        logits, targets, reverse=divergence == 'kl_reverse').sum(-1)
 
 def jensen_shannon_divergence_standard(logits, q):
     """Standard JS: .5 KL(p || m) + .5 KL(q || m), m=(p+q)/2.
@@ -225,7 +283,7 @@ def batched_ottc_loss_reference_implementation(p_weights, q_weights, pfeatures, 
 
     return torch.stack(batch_losses).sum()
     
-def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidian = False, jsd = False, entropy = 0.0, loss_options = '', *, smooth_weight = 0.0, smooth_tau = 4.0, smooth_mask = None):
+def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidian = False, jsd = False, entropy = 0.0, loss_options = '', *, smooth_weight = 0.0, smooth_tau = 4.0, smooth_mask = None, divergence = None):
     """Compute OTTC loss for batched data using bucketization.
     
     https://arxiv.org/pdf/2502.01588v1; equation (11)
@@ -252,8 +310,12 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
         Mask for y indicating valid positions (1) vs padded (0).
     euclidian : bool, optional
         Whether to use Euclidean cost instead of cross-entropy.
-    jsd : bool, optional
-        Whether to use Jensen-Shannon divergence instead of cross-entropy.
+    jsd : bool or str, optional
+        True preserves upstream AG; 'standard' selects standard JS.
+    divergence : str, optional
+        Explicit 'ag', 'kl' (prediction || epsilon target), 'kl_reverse'
+        (epsilon target || prediction), or 'jdiv' (sum of both KLs).
+        Mutually exclusive with jsd/euclidian. See KL helper for epsilon.
     entropy : float, optional
         Entropy regularization weight.
     loss_options : str, optional
@@ -286,6 +348,7 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
             Transport plan weights.
     """
 
+    _validate_divergence(divergence, jsd, euclidian)
     if not math.isfinite(smooth_weight) or smooth_weight < 0:
         raise ValueError('smooth_weight must be finite and nonnegative')
     temporal_penalty = None
@@ -339,6 +402,10 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
     index_qy = index_qy[w_mask]
     w = w[w_mask]
     
+    if divergence is not None:
+        cross_list_ = _divergence_cost(x[index_qx,:], y[index_qy,:].float(), divergence)
+        return add_temporal((w * cross_list_).sum()), index_qx_, index_qy_, h_
+
     if jsd == 'standard':
         cross_list_ = jensen_shannon_divergence_standard(x[index_qx,:], y[index_qy,:].float()).sum(axis=1)
         return add_temporal((w * cross_list_).sum()), index_qx_, index_qy_, h_
@@ -357,7 +424,7 @@ def batched_ottc_loss_bucketized(x, y, a, b, amask = None, bmask = None, euclidi
     cross_list_ = F.cross_entropy(x[index_qx,:] , y[index_qy,:].float(), reduction= 'none')
     return add_temporal((w * cross_list_).sum()),  index_qx_, index_qy_ , h_
 
-def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, entropy = 0.0, loss_options = ''):
+def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, entropy = 0.0, loss_options = '', *, divergence = None):
     """Compute OTTC loss for batched data using concatenated distributions.
 
     This method is faster but introduces very small numerical coupling between batches,
@@ -377,8 +444,11 @@ def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, e
         Probability simplex (weights) for y.
     euclidian : bool, optional
         Whether to use Euclidean cost instead of cross-entropy.
-    jsd : bool, optional
-        Whether to use Jensen-Shannon divergence instead of cross-entropy.
+    jsd : bool or str, optional
+        True preserves upstream AG; 'standard' selects standard JS.
+    divergence : str, optional
+        'ag', 'kl', 'kl_reverse', or 'jdiv', as in the bucketized loss.
+        Like the existing divergence branches, returns a scalar cost.
     entropy : float, optional
         Entropy regularization weight.
     loss_options : str, optional
@@ -397,6 +467,7 @@ def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, e
             Transport plan weights.
     """
     
+    _validate_divergence(divergence, jsd, euclidian)
     x = x.reshape([-1,x.shape[-1]])
     y = y.reshape([-1,y.shape[-1]])
 
@@ -425,6 +496,10 @@ def batched_ottc_loss_concatenated(x, y, a, b, euclidian = False, jsd = False, e
     h = torch.diff(F.pad(cba, (1, 0)))  # 1-d transport w
     w = h[h >= 0]
      
+    if divergence is not None:
+        cross_list_ = _divergence_cost(x[index_qx,:], y[index_qy,:].float(), divergence)
+        return (w * cross_list_).sum()
+
     if jsd == 'standard':
         cross_list_ = jensen_shannon_divergence_standard(x[index_qx,:], y[index_qy,:].float()).sum(axis=1)
         return (w * cross_list_).sum()

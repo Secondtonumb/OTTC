@@ -159,7 +159,7 @@ Key arguments:
 - `--train_name` / `--test_name` choose the split names used inside 🤗 datasets (for LibriSpeech, e.g.
   `train.100`, `train.360`, `train.960`, `test`, `validation`).
 - `--loss_type {ctc,ottc,softdtw,softdtweuc,...}` toggles the output head; OTTC-specific options are
-  controlled by `--bins_metric {crossentropy,euclidian,softeuclidian,jsd}` and
+  controlled by `--bins_metric {crossentropy,euclidian,ag,jsd,jsd_standard,kl,kl_reverse,jdiv}` and
   `--forward_type {regular,alternate_scheme,alternate_scheme2,regfrozen}`.
 - `--prepare_dataset` points to a function in `ottc/utils/prepare_dataset.py`; common choices are
   `prepare_dataset`, `prepare_dataset_border`, or `prepare_dataset_breakdoubleletter` for breaking
@@ -170,6 +170,37 @@ Key arguments:
   `--only_evaluate true` to compute WER without further training.
 - `--batch_size`, `--learning_rate`, `--num_train_epochs`, `--weight_decay`, and
   `--dataloader_num_workers` behave as in Hugging Face `TrainingArguments`.
+
+OTTC divergence costs use natural logarithms and sum class contributions before
+weighting by the transport plan. With `p=softmax(logits)`:
+
+| `--bins_metric` | Cost |
+| --- | --- |
+| `ag` or legacy `jsd` | Upstream arithmetic-geometric divergence: `.5 KL(m||p) + .5 KL(m||q_old)`, `m=(p+q_old)/2` |
+| `jsd_standard` | Standard Jensen-Shannon: `.5 KL(p||m) + .5 KL(q||m)`, `m=(p+q)/2` |
+| `kl` | `KL(p||q_eps)` (prediction to target) |
+| `kl_reverse` | `KL(q_eps||p)` (target to prediction) |
+| `jdiv` | Jeffreys J-divergence: `KL(p||q_eps) + KL(q_eps||p)`, with no factor of one half |
+
+For KL/J, `q_eps = normalize(clamp(q, min=1e-12))`; smoothing is necessary
+because prediction-to-one-hot-target KL is otherwise infinite. New KL/J costs
+use log-softmax and accumulate in float32 for fp16/bfloat16 inputs (float64 is
+preserved). The epsilon is currently fixed at `1e-12` in the training entrypoint;
+standalone helpers accept `eps=`. `kl_reverse` is approximately cross-entropy
+minus target entropy; for unsmoothed one-hot targets it would equal CE.
+
+`ag` deliberately retains the exact upstream perturbation
+`q_old = q + (1-q)*1e-12 - q*1e-12` without renormalization. It is an explicit
+alias for the existing `jsd` behavior, including its numerical limitations;
+old checkpoints/configs remain interpretable. Existing runs named `jsd` must
+not be relabeled as standard JS experiments. These definitions follow
+[Taneja, equations 1.7–1.14](https://rgmia.org/papers/v7n4/Gsdmi_RGMIA.pdf).
+
+Select the new costs with `--bins_metric kl`, `--bins_metric kl_reverse`, or
+`--bins_metric jdiv`. At the loss API, use
+`batched_ottc_loss_bucketized(..., divergence='kl')` (also supported by the
+concatenated implementation). Explicit `divergence` cannot be combined with
+`jsd` or `euclidian`; defaults and historical `jsd=True` calls are unchanged.
 
 Example workflows:
 
