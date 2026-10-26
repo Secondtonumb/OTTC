@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -N div_quick8
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=8:ncpus=16:mpiprocs=1
+#PBS -l walltime=00:10:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export QUICK_ROOT=${QUICK_ROOT:?}
+mkdir -p "$QUICK_ROOT"
+export QUICK_DEADLINE=$(( $(date +%s) + 570 ))
+qstat -f "$PBS_JOBID" > "$QUICK_ROOT/pbs_start.txt"
+awk '!seen[$0]++' "$PBS_NODEFILE" > "$QUICK_ROOT/nodes"
+test "$(wc -l < "$QUICK_ROOT/nodes")" -eq 8
+IFS= read -r QUICK_MASTER < "$QUICK_ROOT/nodes"
+export QUICK_MASTER QUICK_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='QUICK_ROOT;QUICK_DEADLINE;QUICK_MASTER;QUICK_PORT'
+mpirun -np 8 --hostfile "$QUICK_ROOT/nodes" --map-by ppr:1:node --bind-to none \
+    bash reproduction/timit_divergences_20261022/quick_worker.sh

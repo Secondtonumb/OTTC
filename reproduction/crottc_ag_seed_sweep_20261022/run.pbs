@@ -1,0 +1,38 @@
+#!/bin/bash
+#PBS -N crottc_ag_seed
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+SECONDS=0
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+export WANDB_RUN_GROUP=crottc_ag_seed_sweep_20261022
+cro_seed=${CROTTC_SEED:?Seed42 through45 required}
+cro_recipe="crottc_ag__seed$cro_seed"
+cro_root="$PWD/reproduction/crottc_ag_seed_sweep_20261022"
+cro_output="$cro_root/models/$cro_recipe"
+cro_jobs="$cro_root/jobs/${cro_recipe}_${PBS_JOBID}"
+mkdir -p "$cro_jobs" "$cro_output"
+export WANDB_CACHE_DIR="$cro_jobs/wandb_cache" WANDB_DATA_DIR="$cro_jobs/wandb_data"
+exec 9>"$cro_output/.job.lock"
+flock -n 9 || exit 0
+qstat -f "$PBS_JOBID" > "$cro_jobs/pbs_start.txt" || true
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 > "$cro_jobs/telemetry.csv" &
+cro_monitor=$!
+trap 'kill "$cro_monitor" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u -m reproduction.crottc_ag_seed_sweep_20261022.validate --device cuda
+if [[ ! -f "$cro_root/profiles/$cro_recipe/PASS.json" ]]; then
+    "$LIBRI_PYTHON" -u -m reproduction.crottc_ag_seed_sweep_20261022.train --recipe "$cro_recipe" --profile
+fi
+cro_seconds=$((4800 - SECONDS))
+if [[ "$cro_seconds" -lt 60 ]]; then cro_seconds=60; fi
+"$LIBRI_PYTHON" -u -m reproduction.crottc_ag_seed_sweep_20261022.train --recipe "$cro_recipe" --max-seconds "$cro_seconds"
+"$LIBRI_PYTHON" -u -m reproduction.crottc_ag_seed_sweep_20261022.report
+if [[ ! -f "$cro_output/BENCHMARK_COMPLETE.json" ]]; then
+    cro_next=$(TMPDIR=/tmp qsub -v "CROTTC_SEED=$cro_seed" -o "$cro_root/jobs" "$cro_root/run.pbs")
+    printf '%s\n' "$cro_next" > "$cro_jobs/continuation_job.txt"
+fi

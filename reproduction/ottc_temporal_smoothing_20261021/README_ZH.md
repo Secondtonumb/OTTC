@@ -2,7 +2,7 @@
 
 后续按用户指定，已将可选参数直接接入 [`ot_loss.py` 的底层OTTC函数](core_integration/README_ZH.md)。本页其余内容记录前一轮的模型扩展方案；原模型扩展仍可使用。共享`ot_loss.py`如今有明确的底层改动，原保存的验证记录及源码hash保留为历史记录，新回归结果位于`core_integration/`。
 
-Miyabi交互节点可直接运行 [`interactive_gpu.sh`](interactive_gpu.sh)，申请节点、真实小batch测试与参数用法见 [GPU交互测试说明](INTERACTIVE_GPU_ZH.md)。
+Miyabi交互节点可直接运行 [`interactive_gpu.sh`](interactive_gpu.sh)，默认完整训练40 epochs、optimizer batch size 64，按dev PER保留最佳3份权重及最新续训状态；训练及短测试参数见 [GPU交互训练说明](INTERACTIVE_GPU_ZH.md)。
 
 按用户提供的 [原始 MS-TCN 仓库](https://github.com/yabufarha/ms-tcn) 核对了 [model.py 的训练 loss](https://github.com/yabufarha/ms-tcn/blob/master/model.py)：完整类别 log-softmax，参考的前一帧停止梯度，逐类平方差截断到16（τ=4）。原作者系数0.15、按含padding的张量取mean并只使用当前帧mask；这里针对语音变长batch，要求相邻两帧都有效并排除padding归一化，未照搬0.15。
 

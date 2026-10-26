@@ -104,6 +104,8 @@ def load_config_from_args(args: argparse.Namespace) -> Dict[str, Any]:
         'encoder_name': args.encoder_name,
         'forward_type': args.forward_type, #type of forward
         'frozen_epochs_for_regfrozen': args.frozen_epochs_for_regfrozen, # nb of epochs to freeze the wav2vec2 part if forward_type is regfrozen
+        'ottc_decoder': args.ottc_decoder,
+        'ottc_aggregation': args.ottc_aggregation,
         'loss_type': args.loss_type, # ctc or ottc
         'oracle_weights_model': args.oracle_weights_model, #ctc pretrained model for ottc
         'bins_metric': args.bins_metric, #cost function for ottc
@@ -261,6 +263,8 @@ def main():
     parser.add_argument('--forward_type', type=str, default ='regfrozen')
     parser.add_argument('--frozen_epochs_for_regfrozen', type=int, default = 30) # only for regfrozen forward type
     parser.add_argument('--loss_type', type=str, default='ottc', help='Type of loss to use (ctc).')
+    parser.add_argument('--ottc_aggregation', choices=['logits', 'posterior'], default='logits', help='Gamma evidence: weighted logits/log posterior or weighted posterior average.')
+    parser.add_argument('--ottc_decoder', choices=['greedy', 'gamma_greedy_length', 'gamma_reference_length'], default='greedy', help='OTTC position pooling; reference_length is an oracle diagnostic.')
     parser.add_argument('--oracle_weights_model', type=str, default =None)
     parser.add_argument('--bins_metric', type=str, default = 'crossentropy',
                         help='OTTC cost: crossentropy, euclidian, ag, jsd (legacy AG), jsd_standard, kl (prediction||epsilon target), kl_reverse, jdiv (Jeffreys sum)')
@@ -309,6 +313,8 @@ def main():
     metrics_fn = build_compute_metrics(
         processor=processor,
         loss_type=config['loss_type'],
+        decoder=config['ottc_decoder'],
+        aggregation=config['ottc_aggregation'],
         logging_dir=logging_dir,
         capture_alignments=config['dump_eval_artifacts'] and config['loss_type'] == 'ottc',
     )

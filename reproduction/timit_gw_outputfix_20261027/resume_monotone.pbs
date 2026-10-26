@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -N gw_mono_full
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_20261026.train --recipe monotone_w0.1__seed43 --max-seconds 6000
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_outputfix_20261027.report

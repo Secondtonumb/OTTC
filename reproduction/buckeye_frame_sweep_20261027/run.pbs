@@ -1,0 +1,37 @@
+#!/bin/bash
+#PBS -N buckeye_frame3
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=3:ncpus=32:mpiprocs=1
+#PBS -l walltime=08:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+root="$PWD/reproduction/buckeye_frame_sweep_20261027"
+allocation="$root/jobs/${PBS_JOBID:?}"
+mkdir -p "$allocation"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$allocation/nodes"
+test "$(wc -l < "$allocation/nodes")" -eq 3
+case ${BUCKEYE_FRAME_COST:?} in ce|jsd_standard|ag|jdiv) ;; *) exit 2 ;; esac
+git rev-parse HEAD > "$allocation/git_commit.txt"
+qstat -f "$PBS_JOBID" > "$allocation/pbs_start.txt" || true
+export BUCKEYE_FRAME_DEADLINE=$(( $(date +%s) + 28800 ))
+export OMPI_MCA_mca_base_env_list='BUCKEYE_FRAME_COST;BUCKEYE_FRAME_DEADLINE;PBS_JOBID'
+mpirun -np 3 --hostfile "$allocation/nodes" --map-by ppr:1:node --bind-to none bash "$root/worker.sh"
+"$LIBRI_PYTHON" -B -m reproduction.buckeye_frame_sweep_20261027.report
+"$LIBRI_PYTHON" -B - "$allocation" "$BUCKEYE_FRAME_COST" <<'PY'
+import json
+from pathlib import Path
+import sys
+allocation,cost=Path(sys.argv[1]),sys.argv[2]
+names=[f'frame_{cost}__seed{s}' for s in (42,43,44)]
+workers=[json.loads((allocation/name/'WORKER_EXIT.json').read_text()) for name in names]
+complete=all(w['exit_code']==0 for w in workers) and all(
+    (allocation.parents[1]/'models'/name/'BENCHMARK_COMPLETE.json').exists() for name in names)
+status=dict(cost=cost,workers=workers,complete=complete,independent_seeds=True,GPUs=3)
+(allocation/'ALLOCATION_STATUS.json').write_text(json.dumps(status,indent=2)+'\n')
+if complete:
+    (allocation/'ALLOCATION_COMPLETE.json').write_text(json.dumps(status,indent=2)+'\n')
+assert complete,'One or more independent seeds failed or paused; inspect individual logs'
+PY

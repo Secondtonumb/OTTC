@@ -1,0 +1,35 @@
+#!/bin/bash
+#PBS -N libri100_4x3
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=12:ncpus=32:mpiprocs=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+root="$PWD/reproduction/libri100_timit_seed_sweep_20261022"
+allocation="$root/jobs/${PBS_JOBID:?}"
+mkdir -p "$allocation"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$allocation/nodes"
+test "$(wc -l < "$allocation/nodes")" -eq 12
+git rev-parse HEAD > "$allocation/git_commit.txt"
+git diff --binary > "$allocation/tracked_worktree.patch"
+qstat -f "$PBS_JOBID" > "$allocation/pbs_start.txt" || true
+export LIBRI100_DEADLINE=$(( $(date +%s) + 86400 ))
+export OMPI_MCA_mca_base_env_list='LIBRI100_DEADLINE;PBS_JOBID'
+mpirun -np 12 --hostfile "$allocation/nodes" --map-by ppr:1:node --bind-to none \
+    bash "$root/worker.sh"
+"$LIBRI_PYTHON" -u -m reproduction.libri100_timit_seed_sweep_20261022.report
+"$LIBRI_PYTHON" - "$allocation" <<'PY'
+import json
+from pathlib import Path
+import sys
+allocation = Path(sys.argv[1])
+statuses = [json.loads(path.read_text()) for path in allocation.glob('*/WORKER_EXIT.json')]
+assert len(statuses) == 12, statuses
+assert all(row['exit_code'] == 0 for row in statuses), statuses
+report = json.loads((allocation.parents[1] / 'COMPARISON.json').read_text())
+assert report['complete'], 'Incomplete or budget-paused training; retained resumable checkpoints'
+(allocation / 'ALLOCATION_COMPLETE.json').write_text(json.dumps(dict(workers=statuses, complete=True), indent=2) + '\n')
+PY

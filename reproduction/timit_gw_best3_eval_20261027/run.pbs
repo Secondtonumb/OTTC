@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -N gw_best3_eval
+#PBS -q debug-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=00:15:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/timit_gw_best3_eval_20261027/job.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0 WANDB_MODE=disabled
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_best3_eval_20261027.evaluate

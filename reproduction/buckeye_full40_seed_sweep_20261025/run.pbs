@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N buckeye40_4x3
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=12:ncpus=32:mpiprocs=1
+#PBS -l walltime=10:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+root="$PWD/reproduction/buckeye_full40_seed_sweep_20261025"
+allocation="$root/jobs/${PBS_JOBID:?}"
+mkdir -p "$allocation"
+awk '!seen[$0]++' "${PBS_NODEFILE:?}" > "$allocation/nodes"
+test "$(wc -l < "$allocation/nodes")" -eq 12
+export BUCKEYE_DEADLINE=$(( $(date +%s) + 36000 ))
+export OMPI_MCA_mca_base_env_list='BUCKEYE_DEADLINE;PBS_JOBID'
+mpirun -np 12 --hostfile "$allocation/nodes" --map-by ppr:1:node --bind-to none bash "$root/worker.sh"
+"$LIBRI_PYTHON" -m reproduction.buckeye_full40_seed_sweep_20261025.report
+"$LIBRI_PYTHON" - "$allocation" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+allocation = Path(sys.argv[1])
+records = [json.loads(path.read_text()) for path in allocation.glob('*/WORKER_EXIT.json')]
+assert len(records) == 12 and all(record['exit_code'] in (0, 75) for record in records), records
+if any(record['exit_code'] == 75 for record in records):
+	subprocess.run([sys.executable, '-m', 'reproduction.buckeye_full40_seed_sweep_20261025.submit',
+					'--submit', '--resume-from-job', allocation.name], check=True)
+else:
+	assert json.loads((allocation.parents[1] / 'COMPARISON.json').read_text())['complete']
+PY

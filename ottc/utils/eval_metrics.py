@@ -175,10 +175,16 @@ def build_compute_metrics_ottc(
     processor: Any,
     logging_dir: Optional[Path] = None,
     capture_alignments: bool = False,
+    decoder: str = "greedy",
+    aggregation: str = "logits",
 ) -> Any:
-    """
-    Duplicate of the CTC metrics builder ready for OTTC-specific tweaks.
-    """
+    """OTTC metrics; gamma_reference_length is an explicitly oracle diagnostic."""
+    if decoder not in {"greedy", "gamma_greedy_length", "gamma_reference_length"}:
+        raise ValueError(f"Unknown OTTC decoder: {decoder}")
+    if aggregation not in {"logits", "posterior"}:
+        raise ValueError(f"Unknown aggregation: {aggregation}")
+    if decoder == "greedy" and aggregation != "logits":
+        raise ValueError("posterior aggregation requires a gamma decoder")
     wer_metric = load_metric("wer")
     epoch_counter = {"value": 1}
 
@@ -207,14 +213,35 @@ def build_compute_metrics_ottc(
         label_ids[label_ids == -100] = processor.tokenizer.pad_token_id
         label_ids[label_ids == processor.tokenizer.unk_token_id] = processor.tokenizer.pad_token_id
 
-        pred_str = processor.batch_decode(valid_predictions)
+        if decoder == "greedy":
+            pred_str = processor.batch_decode(valid_predictions)
+        else:
+            import torch
+            from ottc.utils.gamma_decode import gamma_decode, greedy_token_count
+            ignored = {processor.tokenizer.pad_token_id, processor.tokenizer.unk_token_id}
+            token_predictions = []
+            for i, ids in enumerate(valid_predictions):
+                if decoder == "gamma_reference_length":
+                    # Count actual target positions, including training markers;
+                    # padding and unknown labels were mapped to pad above.
+                    count = int((label_ids[i] != processor.tokenizer.pad_token_id).sum())
+                else:
+                    count = greedy_token_count(ids, ignored)
+                mask = (output_mask[i] > 0) & (weights_logits[i] > 0)
+                tokens = gamma_decode(
+                    torch.as_tensor(logits[i]), torch.as_tensor(weights_logits[i]),
+                    count, torch.as_tensor(mask), aggregation=aggregation).tolist()
+                token_predictions.append([processor.tokenizer.pad_token_id
+                                          if t == processor.tokenizer.unk_token_id else t
+                                          for t in tokens])
+            pred_str = processor.batch_decode(token_predictions, group_tokens=False)
         label_str = processor.batch_decode(label_ids, group_tokens=False)
 
         wer = wer_metric.compute(predictions=pred_str, references=label_str)
 
         if logging_dir is not None:
             epoch_index = epoch_counter["value"]
-            extra_info: Dict[str, Any] = {}
+            extra_info: Dict[str, Any] = {"decoder": decoder, "aggregation": aggregation, "reference_length_used": decoder == "gamma_reference_length"}
             if capture_alignments and extra_outputs:
                 alignment_payload = _build_alignment_payload(extra_outputs)
                 align_path = _dump_eval_alignments(logging_dir, epoch_index, alignment_payload)
@@ -239,14 +266,18 @@ def build_compute_metrics(
     loss_type: str = "ctc",
     logging_dir: Optional[Path] = None,
     capture_alignments: bool = False,
+    decoder: str = "greedy",
+    aggregation: str = "logits",
 ) -> Any:
     """
     Backward-compatible alias that returns the CTC compute-metrics helper.
     """
+    if loss_type != "ottc" and (decoder != "greedy" or aggregation != "logits"):
+        raise ValueError("gamma decoding requires loss_type=ottc")
     if loss_type in {"ctc", "softdtw", "softdtweuc", "softdtw_1", "softdtw_0.01"}:
         return build_compute_metrics_ctc(processor, logging_dir, capture_alignments)
     elif loss_type == "ottc":
-        return build_compute_metrics_ottc(processor, logging_dir, capture_alignments)
+        return build_compute_metrics_ottc(processor, logging_dir, capture_alignments, decoder=decoder, aggregation=aggregation)
     else:
         raise ValueError(f"Unsupported loss_type '{loss_type}'")
 

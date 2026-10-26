@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N timit_framece
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+export WANDB_RUN_GROUP=timit_frame_ce_20261026
+seed_recipe=${FRAME_CE_RECIPE:?}
+seed_root="$PWD/reproduction/timit_frame_ce_20261026"
+seed_evidence="$seed_root/jobs/$seed_recipe"
+mkdir -p "$seed_evidence"
+export WANDB_CACHE_DIR="$seed_evidence/wandb_cache" WANDB_DATA_DIR="$seed_evidence/wandb_data"
+git rev-parse HEAD > "$seed_evidence/git_commit.txt"
+git diff --binary > "$seed_evidence/tracked_worktree.patch"
+qstat -f "$PBS_JOBID" > "$seed_evidence/pbs_start.txt" || true
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 \
+    >> "$seed_evidence/telemetry.csv" &
+seed_monitor=$!
+trap 'kill "$seed_monitor" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u -m reproduction.timit_frame_ce_20261026.train --recipe "$seed_recipe" --profile
+"$LIBRI_PYTHON" -u -m reproduction.timit_frame_ce_20261026.train --recipe "$seed_recipe" --max-seconds 6000
+"$LIBRI_PYTHON" -B "$seed_root/report.py"

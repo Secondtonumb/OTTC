@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -N timit_gw
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+gw_recipe=${GW_RECIPE:?}
+gw_root="$PWD/reproduction/timit_gw_outputfix_20261027"
+gw_evidence="$gw_root/jobs/$gw_recipe"
+mkdir -p "$gw_evidence"
+export WANDB_CACHE_DIR="$gw_evidence/wandb_cache" WANDB_DATA_DIR="$gw_evidence/wandb_data"
+qstat -f "$PBS_JOBID" > "$gw_evidence/pbs_start.txt" || true
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 \
+    >> "$gw_evidence/telemetry.csv" &
+gw_monitor=$!
+trap 'kill "$gw_monitor" 2>/dev/null || true' EXIT
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_outputfix_20261027.train --recipe "$gw_recipe" --profile
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_outputfix_20261027.train --recipe "$gw_recipe" --max-seconds 12600
+"$LIBRI_PYTHON" -u -m reproduction.timit_gw_outputfix_20261027.report

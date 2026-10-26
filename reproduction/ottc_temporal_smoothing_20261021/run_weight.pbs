@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N ottc_smooth
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=16:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0
+export OTTC_EVAL_UPLOAD=0
+export WANDB_RUN_GROUP=ottc_temporal_smoothing_20261021
+smooth_weight=${SMOOTH_WEIGHT:?Exact smoothing weight required}
+smooth_output=${SMOOTH_OUTPUT:?New output directory required}
+# Keep launcher evidence outside the Trainer output, which must initially be empty.
+smooth_evidence="${smooth_output}.allocation"
+mkdir -p "$smooth_evidence"
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 > "$smooth_evidence/telemetry.csv" &
+smooth_monitor=$!
+trap 'kill "$smooth_monitor" 2>/dev/null || true' EXIT
+qstat -f "$PBS_JOBID" > "$smooth_evidence/pbs_start.txt"
+smooth_resume=()
+if [[ -f "$smooth_output/run_config.json" ]]; then
+    smooth_resume+=(--resume)
+fi
+bash reproduction/ottc_temporal_smoothing_20261021/interactive_gpu.sh \
+    --weight "$smooth_weight" --tau 4 --epochs 40 --batch-size 64 \
+    --max-seconds 6000 --output-dir "$smooth_output" "${smooth_resume[@]}"

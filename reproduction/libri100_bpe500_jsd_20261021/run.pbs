@@ -1,0 +1,39 @@
+#!/bin/bash
+#PBS -N libri100_bpe_jsd
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=2:ncpus=32:mpiprocs=1
+#PBS -l walltime=04:00:00
+#PBS -j oe
+set -euo pipefail
+: "${PBS_JOBID:?PBS GPU allocation required}"
+case "${LIBRI_RECIPE:-}" in ottc_jsd|spottc_jsd) ;; *) exit 2 ;; esac
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export OTTC_EVAL_UPLOAD=0 WANDB_RUN_GROUP=libri100_bpe500_jsd_20261021
+SECONDS=0
+recipe="$PWD/reproduction/libri100_bpe500_jsd_20261021"
+nodefile="$recipe/jobs/nodes_${PBS_JOBID}"
+awk '!seen[$0]++' "${PBS_NODEFILE:?PBS node allocation required}" > "$nodefile"
+test "$(wc -l < "$nodefile")" -eq 2
+IFS= read -r LIBRI_MASTER < "$nodefile"
+export LIBRI_MASTER LIBRI_PORT=$((29500 + ${PBS_JOBID%%.*} % 1000))
+export OMPI_MCA_mca_base_env_list='LIBRI_MASTER;LIBRI_PORT;PBS_JOBID;WANDB_MODE;WANDB_PROJECT;WANDB_ENTITY'
+"$LIBRI_PYTHON" -u "$recipe/train.py" --check
+run_training() {
+    local remaining=$((10800 - SECONDS))
+    if (( remaining < 180 )); then return 75; fi
+    mpirun -np 2 --hostfile "$nodefile" --map-by ppr:1:node --bind-to none \
+        bash "$recipe/worker.sh" --recipe "$LIBRI_RECIPE" --max-seconds "$remaining" "$@"
+}
+if [[ ! -f "$recipe/smoke/$LIBRI_RECIPE/PASS.json" ]]; then
+    if [[ ! -f "$recipe/smoke/$LIBRI_RECIPE/LATEST_STATE.json" ]]; then
+        exit_code=0
+        run_training --smoke --stop-after-steps 1 || exit_code=$?
+        if (( exit_code != 0 && exit_code != 75 )); then exit "$exit_code"; fi
+    fi
+    run_training --smoke
+    if [[ ! -f "$recipe/smoke/$LIBRI_RECIPE/PASS.json" ]]; then exit 75; fi
+fi
+run_training
+if [[ ! -f "$recipe/models/$LIBRI_RECIPE/BENCHMARK_COMPLETE.json" ]]; then exit 75; fi

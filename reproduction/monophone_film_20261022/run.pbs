@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -N timit_film_ag40
+#PBS -q regular-g
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=32:mpiprocs=1
+#PBS -l walltime=02:00:00
+#PBS -j oe
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+source reproduction/libri960_continue5_20261017/environment.sh
+export CUDA_VISIBLE_DEVICES=0 OTTC_EVAL_UPLOAD=0
+export WANDB_RUN_GROUP=monophone_film_20261022
+film_root="$PWD/reproduction/monophone_film_20261022"
+film_recipe=timit__mono_film__ctc_1__ottc_ag_1__seed42
+film_output="$film_root/models/$film_recipe"
+film_jobs="$film_root/jobs/$PBS_JOBID"
+mkdir -p "$film_jobs"
+export WANDB_CACHE_DIR="$film_jobs/wandb_cache" WANDB_DATA_DIR="$film_jobs/wandb_data"
+qstat -f "$PBS_JOBID" > "$film_jobs/pbs_start.txt" || true
+nvidia-smi --query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw --format=csv -l 5 > "$film_jobs/telemetry.csv" &
+film_monitor=$!
+trap 'kill "$film_monitor" 2>/dev/null || true' EXIT
+if [[ ! -f "$film_root/profiles/$film_recipe/PASS.json" ]]; then
+    "$LIBRI_PYTHON" -u -m reproduction.monophone_film_20261022.train --recipe "$film_recipe" --profile
+fi
+"$LIBRI_PYTHON" -u -m reproduction.monophone_film_20261022.train --recipe "$film_recipe" --max-seconds 4800
+if [[ ! -f "$film_output/TRAIN_COMPLETE.json" ]]; then
+    film_next=$(qsub -o "$film_root/jobs" "$film_root/run.pbs")
+    printf '%s\n' "$film_next" > "$film_jobs/continuation_job.txt"
+fi

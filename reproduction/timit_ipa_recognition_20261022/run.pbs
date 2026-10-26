@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N timit_zipa_powsm_pr
+#PBS -q debug-mig
+#PBS -W group_list=gm64
+#PBS -l select=1:ncpus=8:mpiprocs=1
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#PBS -o /work/gm64/m64000/OTTC/reproduction/timit_ipa_recognition_20261022/job.log
+set -euo pipefail
+cd /work/gm64/m64000/OTTC
+export PYTHONPATH="$PWD/reproduction/vendor:$PWD/reproduction:$PWD:/work/gm64/m64000/zipa/mfa_miyabi_20260922/python_site"
+export LD_LIBRARY_PATH=/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib
+export WANDB_MODE=disabled OTTC_EVAL_UPLOAD=0 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1
+export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=0
+export NUMBA_CACHE_DIR=/tmp/timit_ipa_numba_${PBS_JOBID} MPLCONFIGDIR=/tmp/timit_ipa_mpl_${PBS_JOBID}
+nvidia-smi
+/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/bin/python -u -m reproduction.timit_ipa_recognition_20261022.infer zipa
+/work/gm64/m64000/miniforge3/envs/espnet/bin/python -u -m reproduction.timit_ipa_recognition_20261022.infer powsm
+/work/gm64/m64000/miniforge3/envs/phone/bin/python -u reproduction/timit_ipa_recognition_20261022/score.py

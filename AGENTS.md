@@ -1,3 +1,28 @@
+# Buckeye evaluation source (user update, 2026-10-24)
+
+All future Buckeye tests/evaluations must use the user's new full40 corpus from
+`/work/gm64/m64000/dataset/buckeye_miyabi_2026-10-22.tar.gz`.
+The prepared default is `reproduction/data/buckeye_full40_20261022/`; resolve it
+through `reproduction.buckeye_dataset.load_buckeye_rows` and the checked registry
+`reproduction/dataset_defaults.json`. Do not select the old partial19 source,
+62.5-ms HF mirror, or processed CTMs for a new evaluation unless the user
+explicitly requests a historical replay.
+
+The main compatibility view uses the exact historical OTTC 42-ID vocabulary.
+Read `inventory_mapping.json` for all rules (including dx->d, zh->sh, ao->aa,
+nasal/syllabic variants and q exclusion); `reference_native` and untouched raw
+tiers retain the original labels. Never silently discard an unknown phone,
+invent internal boundaries for composite labels, merge adjacent gold intervals,
+or quantize gold timestamps to the model frame grid. Inspect the enumerated
+exclusions and timestamp validation in `audit.json` / `PREPARE_COMPLETE.json`.
+
+The fixed speaker split is FA-Bench's 24/8/8 membership, with the historical
+IF-MDD word-based chunking. This does not imply the FA-Bench paper utterance
+protocol or matching utterance counts. Check historical Buckeye-trained models
+for training/evaluation speaker overlap before comparing them on this split.
+Preserve completed historical data, source snapshots and active training/resume
+contracts; implement new evaluations separately. Evaluation artifacts stay local.
+
 # Evaluation uploads (user update, 2026-10-19)
 
 Tests, smoke/probe runs, checkpoint comparisons, forced alignment, recognition,
@@ -87,3 +112,19 @@ An average of best plus final is a separate two-point experiment, not a
 last-five/last-ten average. Preserve existing completed source snapshots and
 active resume/source-hash contracts; apply trainer changes in a new recipe
 when necessary. This request does not authorize restarting completed runs.
+
+# FP32 models for future experiments (user update, 2026-10-22)
+
+For new experiments, use FP32 for model parameters, cumulative/averaged
+models (`model_avg`), and saved model-weight tensors. Do not create or save
+FP64 model copies or FP64 averaging accumulators. In particular, do not
+carry historical `copy.deepcopy(model).double()` defaults into new recipes.
+Before launching a new recipe, verify the actual model/model_avg dtypes and
+a saved checkpoint, rather than relying only on configuration labels.
+
+This update applies to future experiments only. Do not convert, overwrite,
+or delete existing checkpoints or completed source snapshots for this policy.
+Preserve existing resume/source-hash contracts; when an old entrypoint must
+remain reproducible, implement the FP32 behavior in a new recipe. Existing
+FP16/BF16 autocast compute settings are independent of this FP32 model and
+checkpoint policy and should follow the experiment's approved precision plan.

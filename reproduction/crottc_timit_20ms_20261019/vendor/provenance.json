@@ -1,0 +1,18 @@
+{
+  "source_files": {
+    "/work/gm64/m64000/IF-MDD/utils/LossManager.py": "65d55b532bc4562be360714268bf58ec0ef524dda0a7c74944e47c379e47dbcc",
+    "/work/gm64/m64000/IF-MDD/hparams/phnmonossl_crottc.yaml": "c699431240c2cccc7d1102a2dfa520bf70167834077e847a64d267e66d0b5bd2",
+    "/work/gm64/m64000/IF-MDD/models/phn_mono_ssl_model_v3_refactored.py": "9a14af541d89c49ab9ba8ba38e991c83a39e04c2a7b1eec0f1440393fe0d7e8e",
+    "/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib/python3.10/site-packages/speechbrain/augment/time_domain.py": "5812d36d97af0e5eee64ab86538d338f38b2ce4a4bbd461a8197e69a1b047393",
+    "/work/gm64/m64000/miniforge3/envs/sb_k2_cuda/lib/python3.10/site-packages/speechbrain/augment/augmenter.py": "f922410f29730fa6bd0187bcd4aa77fcaea590482c28b1ef9642ebaf316c7dea"
+  },
+  "method": "CTCLossManager._compute_cr_loss",
+  "method_sha256": "09f304abe560ec93d1dc3ef2cebda71678f56d3005d852f5e9242768f15ac754",
+  "speechbrain_version": "1.0.3",
+  "adaptations": [
+    "Reuse SpeechBrain classes and IF-MDD YAML values; select GPU resampling device during GPU runs.",
+    "Shared speed perturbation precedes two independent DropFreq/DropChunk views.",
+    "Reuse exact legacy CR method including its historical denominator; aggregate over the complete logical batch before dividing total loss by number of source utterances.",
+    "OTTC cost always calls OTTC repository core; IF-MDD transport implementation is not imported."
+  ]
+}

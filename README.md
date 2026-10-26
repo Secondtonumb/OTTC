@@ -9,7 +9,9 @@ SPDX-License-Identifier: MIT
 
 # OTTC: Optimal Temporal Transport Classification
 
-本 fork 的近期修改与复现入口见 [修改整理（2026-10-21）](reproduction/CHANGES_20261021_ZH.md)。
+本 fork 的近期修改与复现入口见 [修改整理（2026-10-27）](reproduction/CHANGES_20261027_ZH.md)；此前修改见 [2026-10-21](reproduction/CHANGES_20261021_ZH.md)。
+
+可选模型：[Monophone CTC → FiLM 声学特征调制 → Monophone OTTC](reproduction/monophone_film_20261022/README_ZH.md)。
 
 [全部当前实验结果、dev/test 覆盖与自动续训](reproduction/english_suite/RESULTS.md)。
 
